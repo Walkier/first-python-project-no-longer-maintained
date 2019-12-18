@@ -1,4 +1,4 @@
-#walkbot 0.1.2 by Walkier
+#walkbot 0.1.2b by Walkier
 #python 3.5.3
 
 import discord
@@ -36,8 +36,7 @@ async def on_ready():
     await chamber.send("ran")
     await void.send("ran")
 
-    await last_seen_background()
-    # await background_hook_loop()
+    await background_hook_loop()
     #await client.edit_profile(username="What name?")
 
 #lmao deletse all of kevin's messages
@@ -63,17 +62,12 @@ async def background_hook_loop():
         nextmin = 60 - datetime.now().second
         await asyncio.sleep(nextmin)
 
-#looping function to check member status
+#check member status and store in dic
 async def last_seen_background():
-    await client.wait_until_ready()
-    while not client.is_closed():
-        members = client.get_all_members()
-        for member in members:
-            if str(member.status) != "offline" and (await bot_or_not(member) == False):
-                member_lastseen[member.name] = datetime.now()
-        
-        nextmin = 60 - datetime.now().second
-        await asyncio.sleep(nextmin)
+    members = client.get_all_members()
+    for member in members:
+        if str(member.status) != "offline" and (await bot_or_not(member) == False):
+            member_lastseen[member.name] = datetime.now()
 
 #helper function to check if bot
 async def bot_or_not(user: discord.User):

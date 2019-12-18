@@ -1,2 +1,2 @@
 # What-Time-Discord-Bot
-Personal Discord bot used for coping with people living different timezones.
+Personal Discord bot used for coping with people living in different timezones.
