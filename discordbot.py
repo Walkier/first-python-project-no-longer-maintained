@@ -1,16 +1,18 @@
-#walkbot 0.1.2b by Walkier
+#walkbot 0.1.3 by Walkier
 #python 3.5.3
 
 import discord
 from discord.ext import commands
 from discord.ext.commands import bot
 import asyncio
-from datetime import datetime, timedelta
-import pytz
+from datetime import datetime
+import json
 
 import logging
 
+from util import format_time
 from PrivateInfo import PrivateInfo
+from GameTime import GameTimeUI, GameTime
 senInfo = PrivateInfo()
 
 logger = logging.getLogger('discord')
@@ -20,8 +22,18 @@ handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(me
 logger.addHandler(handler)
 
 client = commands.Bot(command_prefix='-')
+gameTimeUI = GameTimeUI("Global :(", client)
 botStartTime = datetime.now()
-member_lastseen = {} #global dictionary for lastseen time
+
+# global dictionary for lastseen time
+try:
+    with open("member_lastseen.json") as f:
+        member_lastseen = json.loads(f.read())
+    #parses datetime string from file to obj
+    for member in member_lastseen:
+        member_lastseen[member] = datetime.strptime(member_lastseen[member], '%Y-%m-%d %H:%M:%S.%f')
+except FileNotFoundError:
+    member_lastseen = {} 
 
 #runs when bot is ready
 @client.event
@@ -45,12 +57,19 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    await client.process_commands(message) #allows @client.command methods to work
-    
     if str(message.author) == senInfo.kevin:
         print("Got him", message.author, message.content)
         await message.delete(delay=1.0)
         await client.get_channel(senInfo.void).send(str(message.author)+"|"+str(message.content))
+
+    if str(message.author) == senInfo.author and message.content == "$safe-exit":
+        print("$QUIT RAN BY", senInfo.author)
+        with open("member_lastseen.json", 'w') as f:
+            f.write(json.dumps(member_lastseen, default=str))
+        await message.channel.send("SHUTTING DOWN...")
+        await client.close()
+
+    await client.process_commands(message) #allows @client.command methods to work
 
 #runs a bunch of shit in the background every minute
 async def background_hook_loop():
@@ -62,7 +81,7 @@ async def background_hook_loop():
         nextmin = 60 - datetime.now().second
         await asyncio.sleep(nextmin)
 
-#check member status and store in dic
+#check member status and store time (in bot's tz) in member_lastseen dic
 async def last_seen_background():
     members = client.get_all_members()
     for member in members:
@@ -73,19 +92,6 @@ async def last_seen_background():
 async def bot_or_not(user: discord.User):
     return user.bot
 
-def format_time(time):
-    '''takes datetime.now(), returns formatted string of timezones'''
-    local_tz = pytz.timezone("Asia/Hong_Kong")
-    time = local_tz.localize(time)
-
-    hkt = datetime.strftime(time.astimezone(pytz.timezone("Asia/Hong_Kong")), "%I:%M %p")
-    pdt = datetime.strftime(time.astimezone(pytz.timezone("America/Vancouver")), "%I:%M %p")
-    aus = datetime.strftime(time.astimezone(pytz.timezone("Australia/Melbourne")), "%I:%M %p")
-    use = datetime.strftime(time.astimezone(pytz.timezone("America/Toronto")), "%I:%M %p")
-    ukt = datetime.strftime(time.astimezone(pytz.timezone("Europe/London")), "%I:%M %p")
-
-    return(":flag_ca:: %s | :flag_us:&T: %s | :flag_gb:: %s | :flag_hk:: %s | :flag_au:: %s" % (pdt, use, ukt, hkt, aus))
-
 #commands...
 
 @client.command(pass_context=True, brief="Accepts @user & displays their last online time.")
@@ -93,35 +99,39 @@ async def lastseen(ctx, user: discord.User):
     print(str(datetime.now()) + " lastseen ran by " + str(ctx.message.author))
     channel = ctx.channel
 
-    try:
-        time = member_lastseen[user.name]
-    except:
-        await channel.send("Have not seen user since %s (UTC)." % (botStartTime))
-        return
-
     if str(ctx.message.author) == senInfo.kevin:
         await channel.send("Why do you care?")
+        return
+
+    try:
+        time = member_lastseen[user.name]
+    except KeyError:
+        await channel.send("Have not seen user since %s (UTC)." % (botStartTime))
         return
 
     await channel.send(format_time(time) + '\n On (HK Date): ' + time.strftime("%m/%d"))
 
 @lastseen.error
 async def lastseen_error(ctx, error):
-    channel = ctx.channel
-    await channel.send(str(error)+". Please tag user with @ symbol.")
     print("@Error:", ctx.guild, ctx.message.content)
+    channel = ctx.channel
+
+    await channel.send(str(error)+". Please tag user with @ symbol.")
 
 @client.command(pass_context=True, brief="Pings client.")
 async def ping(ctx):
     print(str(datetime.now()) + " ping ran by " + str(ctx.message.author))
     channel = ctx.channel
+
     if str(ctx.message.author) == senInfo.kevin:
         await channel.send("Who are you?")
         return
+
     await channel.send("pew")
 
 @client.command(pass_context=True, brief="Shows time of various timezones.")
 async def time(ctx):
+    print(str(datetime.now()) + " time ran by " + str(ctx.message.author))
     channel = ctx.channel
 
     if str(ctx.message.author) == senInfo.kevin:
@@ -129,13 +139,15 @@ async def time(ctx):
         return
 
     await channel.send(format_time(datetime.now()))
-    print(str(datetime.now()) + " time ran by " + str(ctx.message.author))
 
 @client.command(pass_context=True, brief="Utilizes quantum tunneling to probe a @user for gayness particles.")
 async def gayornot(ctx, user: discord.User):
+    print(str(datetime.now()) + " gayornot ran by " + str(ctx.message.author))
     channel = ctx.channel
+
     await channel.send("**Processing...**")
     await asyncio.sleep(3)
+
     if str(ctx.message.author) == senInfo.kevin:
         await channel.send("You're gay Kevin.")
         return
@@ -143,7 +155,6 @@ async def gayornot(ctx, user: discord.User):
         await channel.send("gayness particles not found.")
     else:
         await channel.send("gay.")
-    print(str(datetime.now()) + " gayornot ran by " + str(ctx.message.author))
 
 @gayornot.error
 async def gayornot_error(ctx, error):
@@ -151,7 +162,9 @@ async def gayornot_error(ctx, error):
 
 @client.command(pass_context=True)
 async def suck_it(ctx):
+    print(str(datetime.now()) + " suck_it ran by " + str(ctx.message.author))
     channel = ctx.channel
+
     msg = await channel.send(senInfo.emoji_pop+senInfo.emoji_kev)
     await asyncio.sleep(1)
 
@@ -170,13 +183,13 @@ async def suck_it(ctx):
         space = ' '*(i+1)*2
         await asyncio.sleep(delay)
         await msg.edit(content=senInfo.emoji_pop + space + senInfo.emoji_kev)
-    await msg.edit(content=senInfo.emoji_pop+"▫️▫️▫️"+senInfo.emoji_kev) 
+    await msg.edit(content=senInfo.emoji_pop+"▫️▫️▫️"+senInfo.emoji_kev)
 
-    print(str(datetime.now()) + " suck_it ran by " + str(ctx.message.author))
-
-@client.command(pass_context=True, brief="Coming soon!")
+@client.command(pass_context=True, brief="Schedule a game time with friends! Takes no arguments.")
 async def gametime(ctx):
     print(str(datetime.now()) + " gametime ran by " + str(ctx.message.author))
+    await ctx.channel.send("This command is still under construction.")
+    await gameTimeUI.new_gametime(ctx)
 
 '''
 stuff to do:
