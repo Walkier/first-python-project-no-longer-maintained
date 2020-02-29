@@ -1,5 +1,6 @@
 import discord
 import asyncio
+import collections
 
 class GameTimeUI:
     timeout = 60.0
@@ -27,7 +28,12 @@ class GameTimeUI:
 
     async def _select_tz(self, game_time):
         msg = await game_time.channel.send("Select your timezone.")
-        reactions = ['🇨🇦', '🇺🇸', '🇬🇧', '🇭🇰', '🇦🇺']
+
+        keys = ['🇨🇦', '🇺🇸', '🇬🇧', '🇭🇰', '🇦🇺']
+        contents = ['America/Vancouver', 'America/Toronto', 'Europe/London', 'Asia/Hong_Kong', 'Australia/Melbourne']
+        reactions = collections.OrderedDict()
+        for i, key in enumerate(keys):
+            reactions[key] = contents[i]
         
         async def add_reactions(msg, reactions):
             for emoji in reactions:
@@ -36,15 +42,20 @@ class GameTimeUI:
         asyncio.get_event_loop().create_task(add_reactions(msg, reactions))
 
         def check(reaction, user):
-            return user == game_time.author and reaction.message.id == msg.id and reaction.emoji in reactions
+            return user == game_time.author and reaction.message.id == msg.id and reaction.emoji in reactions.keys()
 
         try:
             reaction, user = await self.client.wait_for('reaction_add', timeout=self.timeout, check=check)
         except asyncio.TimeoutError:
             await self._time_out(game_time)
             return
-        else:
-            await game_time.channel.send('👍')
+
+        game_time.tz =  reactions[reaction.emoji]
+        await msg.delete()
+        await self._select_time(game_time)
+
+    async def _select_time(self, game_time):
+        await game_time.channel.send("Type a time.\n(Accepted formats: 1pm, 13, 1:30pm, 13:30)")
 
         await self._time_out(game_time)
 
@@ -56,3 +67,4 @@ class GameTime:
     def __init__(self, ctx):
         self.author = ctx.author
         self.channel = ctx.channel
+        self.tz = None

@@ -5,8 +5,9 @@ import discord
 from discord.ext import commands
 from discord.ext.commands import bot
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
+import collections
 
 import logging
 
@@ -22,18 +23,25 @@ handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(me
 logger.addHandler(handler)
 
 client = commands.Bot(command_prefix='-')
-gameTimeUI = GameTimeUI("Global :(", client)
-botStartTime = datetime.now()
+Game_time_ui = GameTimeUI("Global :(", client)
+Bot_start_time = datetime.now()
 
-# global dictionary for lastseen time
+# global dictionaries T-T
 try:
     with open("member_lastseen.json") as f:
-        member_lastseen = json.loads(f.read())
+        Member_lastseen = json.loads(f.read())
     #parses datetime string from file to obj
-    for member in member_lastseen:
-        member_lastseen[member] = datetime.strptime(member_lastseen[member], '%Y-%m-%d %H:%M:%S.%f')
+    for member in Member_lastseen:
+        Member_lastseen[member] = datetime.strptime(Member_lastseen[member], '%Y-%m-%d %H:%M:%S.%f')
 except FileNotFoundError:
-    member_lastseen = {} 
+    Member_lastseen = {} 
+
+try:
+    with open("temp_msg_count_global.json") as f:
+        Temp_msg_count_global = json.loads(f.read())
+except FileNotFoundError:
+    Temp_msg_count_global = {'date\nx': Bot_start_time}
+Last_week_stat_msg = [None]
 
 #runs when bot is ready
 @client.event
@@ -51,24 +59,28 @@ async def on_ready():
     await background_hook_loop()
     #await client.edit_profile(username="What name?")
 
-#lmao deletse all of kevin's messages
+#runs when any message is recieved by bot in any of the channels it is in
 @client.event
 async def on_message(message):
     if message.author == client.user:
         return
 
-    if str(message.author) == senInfo.kevin:
-        print("Got him", message.author, message.content)
-        await message.delete(delay=1.0)
-        await client.get_channel(senInfo.void).send(str(message.author)+"|"+str(message.content))
-
-    if str(message.author) == senInfo.author and message.content == "$safe-exit":
+    if message.content == "$safe-exit" and str(message.author) == senInfo.author:
         print("$QUIT RAN BY", senInfo.author)
         with open("member_lastseen.json", 'w') as f:
-            f.write(json.dumps(member_lastseen, default=str))
+            f.write(json.dumps(Member_lastseen, default=str))
+        with open("temp_msg_count_global.json", 'w') as f:
+            f.write(json.dumps(Temp_msg_count_global))
         await message.channel.send("SHUTTING DOWN...")
         await client.close()
 
+    # weekly_msg_stats() on_message hook
+    if message.channel.id == PrivateInfo.peruni_gen_id and not message.author.bot:
+        if message.author.display_name in Temp_msg_count_global:
+            Temp_msg_count_global[message.author.display_name] += 1
+        else:
+            Temp_msg_count_global[message.author.display_name] = 1
+        
     await client.process_commands(message) #allows @client.command methods to work
 
 #runs a bunch of shit in the background every minute
@@ -77,20 +89,58 @@ async def background_hook_loop():
     while not client.is_closed():
         #hooks
         await last_seen_background()
+        if datetime.now().weekday() == 5 and datetime.now().hour == 0 and datetime.now().minute == 0:
+            await weekly_msg_stats() 
 
         nextmin = 60 - datetime.now().second
         await asyncio.sleep(nextmin)
 
-#check member status and store time (in bot's tz) in member_lastseen dic
+#check member status and store time (in bot's tz) in Member_lastseen dic
 async def last_seen_background():
     members = client.get_all_members()
     for member in members:
-        if str(member.status) != "offline" and (await bot_or_not(member) == False):
-            member_lastseen[member.name] = datetime.now()
+        if str(member.status) != "offline" and not member.bot:
+            Member_lastseen[member.name] = datetime.now()
 
-#helper function to check if bot
-async def bot_or_not(user: discord.User):
-    return user.bot
+#sends weekly msg count stats to channel
+async def weekly_msg_stats():
+    channel = client.get_channel(senInfo.peruni_gen_id)
+
+    #unpin last week's message
+    if Last_week_stat_msg[0]:
+        try:
+            await Last_week_stat_msg[0].unpin()
+        except (discord.Forbidden, discord.NotFound, discord.HTTPException) as e:
+            print("weekly_msg_stats: Unpin exception.", e)
+        except:
+            print("weekly_msg_stats: Unexpected unpin exception.")
+
+    statStartDate = datetime.strftime(Temp_msg_count_global['date\nx'], '%m/%d')
+    del Temp_msg_count_global['date\nx']
+
+    #sort users in dic by message count into a list of tuples 
+    sorted_buffer = sorted(Temp_msg_count_global.items(), key = lambda kv:(kv[1], kv[0]), reverse=True)
+    total_msgs = sum(msg[1] for msg in sorted_buffer)
+
+    #turn string buffer into " user1: msg% | user2: msg% | user3: msg% "
+    string_buffer = " "
+    for user_record in sorted_buffer:
+        string_buffer += "{}: *{}*% | ".format(user_record[0], round(user_record[1]/total_msgs*100, 2))
+    for member in channel.members:
+        if member.display_name not in Temp_msg_count_global.keys() and not member.bot:
+            string_buffer += member.display_name + ": *0%* | "
+    string_buffer = string_buffer[:-2]
+
+    msg = await channel.send("**Weekly Message Count Breakdown** ("+statStartDate+" - "+datetime.strftime(datetime.now(),'%m/%d')+"):"+ \
+        "\nLoneliest ->**" + string_buffer + "**<- Nonexistent")
+    
+    await msg.pin()
+    Last_week_stat_msg[0] = msg
+
+    #reset dic and repopulate with date
+    print(datetime.now(), "msg count bf clear", Temp_msg_count_global)
+    Temp_msg_count_global.clear()
+    Temp_msg_count_global['date\nx'] = datetime.now()
 
 #commands...
 
@@ -104,9 +154,9 @@ async def lastseen(ctx, user: discord.User):
         return
 
     try:
-        time = member_lastseen[user.name]
+        time = Member_lastseen[user.name]
     except KeyError:
-        await channel.send("Have not seen user since %s (UTC)." % (botStartTime))
+        await channel.send("Have not seen user since at least %s (HKT)." % (Bot_start_time))
         return
 
     await channel.send(format_time(time) + '\n On (HK Date): ' + time.strftime("%m/%d"))
@@ -189,7 +239,7 @@ async def suck_it(ctx):
 async def gametime(ctx):
     print(str(datetime.now()) + " gametime ran by " + str(ctx.message.author))
     await ctx.channel.send("This command is still under construction.")
-    await gameTimeUI.new_gametime(ctx)
+    await Game_time_ui.new_gametime(ctx)
 
 '''
 stuff to do:
@@ -198,7 +248,6 @@ error outputs to chat if arguments are wrong
 ai stuff
 refactor to be class based
 
-file i/o for lastseen
 remindme/them
 game time planner
 
