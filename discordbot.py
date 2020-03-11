@@ -1,4 +1,4 @@
-#walkbot 0.1.3 by Walkier
+#walkbot 0.1.4 by Walkier
 #python 3.5.3
 
 import discord
@@ -33,13 +33,14 @@ try:
     #parses datetime string from file to obj
     for member in Member_lastseen:
         Member_lastseen[member] = datetime.strptime(Member_lastseen[member], '%Y-%m-%d %H:%M:%S.%f')
-except FileNotFoundError:
+except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
     Member_lastseen = {} 
 
 try:
     with open("temp_msg_count_global.json") as f:
         Temp_msg_count_global = json.loads(f.read())
-except FileNotFoundError:
+    Temp_msg_count_global['date\nx'] = datetime.strptime(Temp_msg_count_global['date\nx'], '%Y-%m-%d %H:%M:%S.%f')
+except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
     Temp_msg_count_global = {'date\nx': Bot_start_time}
 Last_week_stat_msg = [None]
 
@@ -70,7 +71,7 @@ async def on_message(message):
         with open("member_lastseen.json", 'w') as f:
             f.write(json.dumps(Member_lastseen, default=str))
         with open("temp_msg_count_global.json", 'w') as f:
-            f.write(json.dumps(Temp_msg_count_global))
+            f.write(json.dumps(Temp_msg_count_global, default=str))
         await message.channel.send("SHUTTING DOWN...")
         await client.close()
 
@@ -80,7 +81,13 @@ async def on_message(message):
             Temp_msg_count_global[message.author.display_name] += 1
         else:
             Temp_msg_count_global[message.author.display_name] = 1
-        
+
+    if (str(message.author) == PrivateInfo.rust) and message.channel.id == PrivateInfo.peruni_gen_id:
+        if len(message.channel.members) > 9:
+            for mem in message.channel.members:
+                if mem.bot and mem != client.user:
+                    await message.channel.send("I detect "+str(mem)+" in this channel and therefore it can read and log all your messages.\nAre you sure you want this stranger to have this power?\n"+message.content)
+
     await client.process_commands(message) #allows @client.command methods to work
 
 #runs a bunch of shit in the background every minute
@@ -149,10 +156,6 @@ async def lastseen(ctx, user: discord.User):
     print(str(datetime.now()) + " lastseen ran by " + str(ctx.message.author))
     channel = ctx.channel
 
-    if str(ctx.message.author) == senInfo.kevin:
-        await channel.send("Why do you care?")
-        return
-
     try:
         time = Member_lastseen[user.name]
     except KeyError:
@@ -166,16 +169,12 @@ async def lastseen_error(ctx, error):
     print("@Error:", ctx.guild, ctx.message.content)
     channel = ctx.channel
 
-    await channel.send(str(error)+". Please tag user with @ symbol.")
+    await channel.send(str(error)+"\nPlease tag user with @ symbol.")
 
 @client.command(pass_context=True, brief="Pings client.")
 async def ping(ctx):
     print(str(datetime.now()) + " ping ran by " + str(ctx.message.author))
     channel = ctx.channel
-
-    if str(ctx.message.author) == senInfo.kevin:
-        await channel.send("Who are you?")
-        return
 
     await channel.send("pew")
 
@@ -184,8 +183,8 @@ async def time(ctx):
     print(str(datetime.now()) + " time ran by " + str(ctx.message.author))
     channel = ctx.channel
 
-    if str(ctx.message.author) == senInfo.kevin:
-        await channel.send("Who are you?")
+    if str(ctx.message.author) == PrivateInfo.arm:
+        await channel.send(PrivateInfo.appreciate_msg)
         return
 
     await channel.send(format_time(datetime.now()))
