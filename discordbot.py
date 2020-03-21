@@ -6,12 +6,13 @@ from discord.ext import commands
 from discord.ext.commands import bot
 import asyncio
 from datetime import datetime, timedelta
-import json
-import collections
+import random, json, errno, os, collections
+import time as stime
+import urllib.parse
 
 import logging
 
-from util import format_time
+from util import format_time, get_json
 from PrivateInfo import PrivateInfo
 from GameTime import GameTimeUI, GameTime
 senInfo = PrivateInfo()
@@ -63,10 +64,11 @@ async def on_ready():
 #runs when any message is recieved by bot in any of the channels it is in
 @client.event
 async def on_message(message):
-    if message.author == client.user:
+    if message.author == client.user or message.author.bot:
         return
 
-    if message.content == "$safe-exit" and str(message.author) == senInfo.author:
+    #safe exit hook
+    if message.content == "$exit" and str(message.author) == senInfo.author:
         print("$QUIT RAN BY", senInfo.author)
         with open("member_lastseen.json", 'w') as f:
             f.write(json.dumps(Member_lastseen, default=str))
@@ -76,12 +78,13 @@ async def on_message(message):
         await client.close()
 
     # weekly_msg_stats() on_message hook
-    if message.channel.id == PrivateInfo.peruni_gen_id and not message.author.bot:
+    if message.channel.id == PrivateInfo.peruni_gen_id:
         if message.author.display_name in Temp_msg_count_global:
             Temp_msg_count_global[message.author.display_name] += 1
         else:
             Temp_msg_count_global[message.author.display_name] = 1
 
+    #protect general hook
     if (str(message.author) == PrivateInfo.rust) and message.channel.id == PrivateInfo.peruni_gen_id:
         if len(message.channel.members) > 9:
             for mem in message.channel.members:
@@ -96,7 +99,7 @@ async def background_hook_loop():
     while not client.is_closed():
         #hooks
         await last_seen_background()
-        if datetime.now().weekday() == 5 and datetime.now().hour == 0 and datetime.now().minute == 0:
+        if datetime.now().weekday() == 5 and datetime.now().hour == 8 and datetime.now().minute == 0:
             await weekly_msg_stats() 
 
         nextmin = 60 - datetime.now().second
@@ -135,7 +138,7 @@ async def weekly_msg_stats():
         string_buffer += "{}: *{}*% | ".format(user_record[0], round(user_record[1]/total_msgs*100, 2))
     for member in channel.members:
         if member.display_name not in Temp_msg_count_global.keys() and not member.bot:
-            string_buffer += member.display_name + ": *0%* | "
+            string_buffer += member.mention + ": *0%* | "
     string_buffer = string_buffer[:-2]
 
     msg = await channel.send("**Weekly Message Count Breakdown** ("+statStartDate+" - "+datetime.strftime(datetime.now(),'%m/%d')+"):"+ \
@@ -166,7 +169,7 @@ async def lastseen(ctx, user: discord.User):
 
 @lastseen.error
 async def lastseen_error(ctx, error):
-    print("@Error:", ctx.guild, ctx.message.content)
+    print("@Error:", ctx.message.content, error, ctx.guild, sep=' | ')
     channel = ctx.channel
 
     await channel.send(str(error)+"\nPlease tag user with @ symbol.")
@@ -239,6 +242,68 @@ async def gametime(ctx):
     print(str(datetime.now()) + " gametime ran by " + str(ctx.message.author))
     await ctx.channel.send("This command is still under construction.")
     await Game_time_ui.new_gametime(ctx)
+
+'''add next image, and troll'''
+#blatantly copied from NotSoBot
+@client.command(pass_context=True, aliases=['image', 'photo', 'img'], brief="Blatant copy of NotSoBot's image search command.", cooldown=(3, 5))
+@commands.cooldown(rate=2, per=15.0, type=commands.BucketType.user)
+async def im(ctx, *, search:str):
+    print(str(datetime.now()) + " image ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    #manual limit on num of searches
+    try:
+        with open("savefiles/daily_search_use.txt") as f:
+            #if file last mod date not today
+            if stime.strftime('%d', stime.localtime(os.path.getmtime("savefiles/daily_search_use.txt"))) != datetime.strftime(datetime.now(), '%d'):
+                use_count = 0
+            else:
+                use_count = int(f.read())
+    except IOError as e:
+        if e.errno == errno.ENOENT:
+            print ('im: day restart?', datetime.now())
+        else:
+            print ('im: some other file io ERROR')
+        use_count = 0
+
+    if use_count > 95:
+        await channel.send("Exceeded 100 daily free searches given by Google API. Pay me so I can pay Google for more searches.")
+        return
+
+    #request
+    try:
+        key = senInfo.google_cus_search_json_api_key
+        api = "https://www.googleapis.com/customsearch/v1?key={0}&cx=015418243597773804934:it6asz9vcss&searchType=image&q={1}".format(key, urllib.parse.quote(search))
+        load = await get_json(api)
+        assert 'error' not in load.keys() and 'items' in load.keys()
+        assert len(load)
+        rand = random.choice(load['items'])
+        # print([x['link'] for x in load['items']])
+        image = rand['link']
+        await channel.send(image)
+
+        use_count += 1
+        with open("savefiles/daily_search_use.txt", 'w') as f:
+            f.write(str(use_count))
+    except discord.errors.Forbidden:
+        await channel.send("no send_file permission")
+        return
+    except AssertionError:
+        # scrap = await self.google_scrap(search, True if level != 'off' else False, True)
+        scrap = False
+        if scrap:
+            await channel.send(scrap)
+        else:
+            await channel.send(":warning: `API Quota Reached or Invalid Search`")
+    except:
+        raise
+
+@im.error
+async def im_error(ctx, error):
+    print("@Error:", ctx.message.content, error, ctx.guild, sep=' | ')
+    channel = ctx.channel
+
+    await channel.send("Hi! Command 'im' says: "+str(error))
 
 '''
 stuff to do:
