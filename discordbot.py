@@ -29,7 +29,7 @@ Bot_start_time = datetime.now()
 
 # global dictionaries T-T
 try:
-    with open("member_lastseen.json") as f:
+    with open("savefiles/member_lastseen.json") as f:
         Member_lastseen = json.loads(f.read())
     #parses datetime string from file to obj
     for member in Member_lastseen:
@@ -38,7 +38,7 @@ except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
     Member_lastseen = {} 
 
 try:
-    with open("temp_msg_count_global.json") as f:
+    with open("savefiles/temp_msg_count_global.json") as f:
         Temp_msg_count_global = json.loads(f.read())
     Temp_msg_count_global['date\nx'] = datetime.strptime(Temp_msg_count_global['date\nx'], '%Y-%m-%d %H:%M:%S.%f')
 except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
@@ -51,7 +51,7 @@ async def on_ready():
     print("I am " + client.user.name)
     print(str(client.guilds))
 
-    await client.change_presence(activity = discord.Game(name="-help yourself :)"))
+    await client.change_presence(activity = discord.Game(name="-help"))
 
     chamber = client.get_channel(senInfo.chamber)
     void = client.get_channel(senInfo.void)
@@ -64,18 +64,16 @@ async def on_ready():
 #runs when any message is recieved by bot in any of the channels it is in
 @client.event
 async def on_message(message):
+    if str(message.author) == "RPG Schedule#4691" and message.channel.id == PrivateInfo.peruni_eventschan_id:
+        await inform_event(message)
+
+    #prevent echo and bots
     if message.author == client.user or message.author.bot:
         return
 
-    #safe exit hook
-    if message.content == "$exit" and str(message.author) == senInfo.author:
-        print("$QUIT RAN BY", senInfo.author)
-        with open("member_lastseen.json", 'w') as f:
-            f.write(json.dumps(Member_lastseen, default=str))
-        with open("temp_msg_count_global.json", 'w') as f:
-            f.write(json.dumps(Temp_msg_count_global, default=str))
-        await message.channel.send("SHUTTING DOWN...")
-        await client.close()
+    #admin_commands hook
+    if message.content[0] == '$' and str(message.author) == senInfo.author:
+        await admin_commands(message)
 
     # weekly_msg_stats() on_message hook
     if message.channel.id == PrivateInfo.peruni_gen_id:
@@ -92,6 +90,43 @@ async def on_message(message):
                     await message.channel.send("I detect "+str(mem)+" in this channel and therefore it can read and log all your messages.\nAre you sure you want this stranger to have this power?\n"+message.content)
 
     await client.process_commands(message) #allows @client.command methods to work
+
+async def admin_commands(message):
+    if(message.content == "$exit"):
+        print("$QUIT RAN BY", senInfo.author)
+        with open("savefiles/member_lastseen.json", 'w') as f:
+            f.write(json.dumps(Member_lastseen, default=str))
+        with open("savefiles/temp_msg_count_global.json", 'w') as f:
+            f.write(json.dumps(Temp_msg_count_global, default=str))
+        await message.channel.send("SHUTTING DOWN...")
+        await client.close()
+    elif(message.content.split()[0] == "$status"):
+        await client.change_presence(activity = discord.Game(name = message.content[8:]))
+
+# #on_message hook defs
+
+#sends event notif to general
+async def inform_event(message):
+    try:
+        if message.embeds[0].fields[0].name == 'When':
+            per_gen = client.get_channel(PrivateInfo.peruni_gen_id)
+            for field in message.embeds[0].fields:
+                if field.name.startswith('Reserved'):
+                    invited = field.value.split('\n')
+            if 'invited' not in locals():
+                return
+            invited_str = ""
+            if invited[0] != "No players":
+                for person in invited:
+                    invited_str += '<' + person.split('<')[1] + ' '
+                sent_msg = await per_gen.send("New event **{}** at <#{}>!\n".format(message.embeds[0].title, PrivateInfo.peruni_eventschan_id)\
+                    + invited_str + "Confirm your attendance now. :white_check_mark:")
+                await sent_msg.add_reaction('✅')
+            else:
+                await per_gen.send("New event **{}** at <#{}>!\n".format(message.embeds[0].title, PrivateInfo.peruni_eventschan_id)\
+                    + invited_str + "Join the event by clicking + in <#{}>.".format(PrivateInfo.peruni_eventschan_id))
+    except IndexError:
+        pass
 
 #runs a bunch of shit in the background every minute
 async def background_hook_loop():
@@ -152,7 +187,7 @@ async def weekly_msg_stats():
     Temp_msg_count_global.clear()
     Temp_msg_count_global['date\nx'] = datetime.now()
 
-#commands...
+# #commands...
 
 @client.command(pass_context=True, brief="Accepts @user & displays their last online time.")
 async def lastseen(ctx, user: discord.User):
