@@ -1,4 +1,4 @@
-#walkbot 0.1.4 by Walkier
+#walkbot 0.2.0 by Walkier
 #python 3.5.3 on pi
 
 # SEE async def ping(ctx) for definition of the simplest command
