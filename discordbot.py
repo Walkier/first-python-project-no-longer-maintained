@@ -1,31 +1,40 @@
 #walkbot 0.1.4 by Walkier
-#python 3.5.3
+#python 3.5.3 on pi
+
+# SEE async def ping(ctx) for definition of the simplest command
 
 import discord
 from discord.ext import commands
-from discord.ext.commands import bot
-import asyncio
-from datetime import datetime, timedelta
-import random, json, errno, os, collections
+from discord.ext.commands import bot #https://stackoverflow.com/questions/51234778/what-are-the-differences-between-bot-and-client#:~:text=Just%20use%20commands.,Bot%20.&text=If%20you%20simply%20want%20your,means%2C%20use%20the%20base%20Client%20.
+
 import time as stime
+from datetime import datetime, timedelta
+import asyncio
+import random, json, errno, os
 import urllib.parse
+import pdb
+
+import util
+from PrivateVals import PrivateVals
+from PublicVals import PublicVals
+from EncapLogic import EncapLogic
+# from GameTime import GameTimeUI, GameTime
+
+import dateparser
+import pytz
 
 import logging
-
-from util import format_time, get_json
-from PrivateInfo import PrivateInfo
-from GameTime import GameTimeUI, GameTime
-senInfo = PrivateInfo()
-
+import traceback
 logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 handler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
 logger.addHandler(handler)
 
-client = commands.Bot(command_prefix='-')
-Game_time_ui = GameTimeUI("Global :(", client)
+client = commands.Bot(command_prefix='-', intents = discord.Intents.all())
+# Game_time_ui = GameTimeUI("Global :(", client)
 Bot_start_time = datetime.now()
+fm_bool = False
 
 # global dictionaries T-T
 try:
@@ -45,90 +54,126 @@ except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
     Temp_msg_count_global = {'date\nx': Bot_start_time}
 Last_week_stat_msg = [None]
 
-#runs when bot is ready
+siege_stopper_dic = {}
+encapLogic = EncapLogic(client)
+
+# -- runs when bot is ready --
 @client.event
 async def on_ready():
-    print("I am " + client.user.name)
+    print("I am ", client.user.name, datetime.now())
     print(str(client.guilds))
 
     await client.change_presence(activity = discord.Game(name="-help"))
 
-    chamber = client.get_channel(senInfo.chamber)
-    void = client.get_channel(senInfo.void)
+    chamber = client.get_channel(PrivateVals.chamber)
+    void = client.get_channel(PrivateVals.void)
     await chamber.send("ran")
     await void.send("ran")
+
+    #load in uni_time_triggers global dict :(
+    try:
+        with open("savefiles/uni_time_triggers.json") as f:
+            uni_time_triggers = json.loads(f.read())
+            for date in uni_time_triggers:
+                for author in list(uni_time_triggers[date]):
+                    # print("_", uni_time_triggers[date][author]['channel'], date, "_")
+                    if uni_time_triggers[date][author]['channel'] != None:
+                        if uni_time_triggers[date][author]['channel'].isnumeric():
+                            uni_time_triggers[date][author]['channel'] = client.get_channel(int(uni_time_triggers[date][author]['channel']))
+                        else:
+                            del uni_time_triggers[date][author]
+            globals()['uni_time_triggers'] = uni_time_triggers
+    except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
+        globals()['uni_time_triggers'] = {}
+    except Exception as e:
+        print("Unexpected exception:", e)
+        globals()['uni_time_triggers'] = {}
 
     await background_hook_loop()
     #await client.edit_profile(username="What name?")
 
-#runs when any message is recieved by bot in any of the channels it is in
+# -- runs when any message is recieved by bot in any of the channels it is in --
 @client.event
 async def on_message(message):
-    if str(message.author) == "RPG Schedule#4691" and message.channel.id == PrivateInfo.peruni_eventschan_id:
-        await inform_event(message)
-
     #prevent echo and bots
     if message.author == client.user or message.author.bot:
         return
 
     #admin_commands hook
-    if message.content[0] == '$' and str(message.author) == senInfo.author:
+    if message.content and message.content[0] == '$' and str(message.author) == PrivateVals.author:
         await admin_commands(message)
 
     # weekly_msg_stats() on_message hook
-    if message.channel.id == PrivateInfo.peruni_gen_id:
+    if message.channel.id == PrivateVals.peruni_gen_id:
         if message.author.display_name in Temp_msg_count_global:
             Temp_msg_count_global[message.author.display_name] += 1
         else:
             Temp_msg_count_global[message.author.display_name] = 1
 
     #protect general hook
-    if (str(message.author) == PrivateInfo.rust) and message.channel.id == PrivateInfo.peruni_gen_id:
+    if (str(message.author) == PrivateVals.rust) and message.channel.id == PrivateVals.peruni_gen_id:
         if len(message.channel.members) > 9:
             for mem in message.channel.members:
                 if mem.bot and mem != client.user:
                     await message.channel.send("I detect "+str(mem)+" in this channel and therefore it can read and log all your messages.\nAre you sure you want this stranger to have this power?\n"+message.content)
 
+    if encapLogic.debug:
+        await encapLogic.debug_hook(message)
+
+    # if str(message.author) == "RPG Schedule#4691" and message.channel.id == PrivateVals.peruni_eventschan_id:
+    # await inform_event(message)
+
     await client.process_commands(message) #allows @client.command methods to work
+
+#  -- on_message hook defs --
 
 async def admin_commands(message):
     if(message.content == "$exit"):
-        print("$QUIT RAN BY", senInfo.author)
+        print("$QUIT RAN BY", PrivateVals.author)
         with open("savefiles/member_lastseen.json", 'w') as f:
             f.write(json.dumps(Member_lastseen, default=str))
         with open("savefiles/temp_msg_count_global.json", 'w') as f:
             f.write(json.dumps(Temp_msg_count_global, default=str))
+        with open("savefiles/uni_time_triggers.json", 'w') as f:
+            f.write(json.dumps(uni_time_triggers, default=util.serialize_uni_time_triggers))
         await message.channel.send("SHUTTING DOWN...")
         await client.close()
     elif(message.content.split()[0] == "$status"):
         await client.change_presence(activity = discord.Game(name = message.content[8:]))
-
-# #on_message hook defs
+        globals()['fm_bool'] = False
+    elif(message.content.split()[0] == "$lastfm"):
+        globals()['fm_bool'] = not globals()['fm_bool']
+        if globals()['fm_bool']:
+            await client.change_presence(activity = discord.Activity(name='last.fm', type=discord.ActivityType.listening))
+        else:
+            await client.change_presence(activity = discord.Game(name="-help"))
+    else:
+        await encapLogic.admin_commands(message)
 
 #sends event notif to general
-async def inform_event(message):
-    try:
-        if message.embeds[0].fields[0].name == 'When':
-            per_gen = client.get_channel(PrivateInfo.peruni_gen_id)
-            for field in message.embeds[0].fields:
-                if field.name.startswith('Reserved'):
-                    invited = field.value.split('\n')
-            if 'invited' not in locals():
-                return
-            invited_str = ""
-            if invited[0] != "No players":
-                for person in invited:
-                    invited_str += '<' + person.split('<')[1] + ' '
-                sent_msg = await per_gen.send("New event **{}** at <#{}>!\n".format(message.embeds[0].title, PrivateInfo.peruni_eventschan_id)\
-                    + invited_str + "Confirm your attendance now. :white_check_mark:")
-                await sent_msg.add_reaction('✅')
-            else:
-                await per_gen.send("New event **{}** at <#{}>!\n".format(message.embeds[0].title, PrivateInfo.peruni_eventschan_id)\
-                    + invited_str + "Join the event by clicking + in <#{}>.".format(PrivateInfo.peruni_eventschan_id))
-    except IndexError:
-        pass
+# async def inform_event(message):
+#     try:
+#         if message.embeds[0].fields[0].name == 'When':
+#             per_gen = client.get_channel(PrivateVals.peruni_gen_id)
+#             for field in message.embeds[0].fields:
+#                 if field.name.startswith('Sign Ups'):
+#                     invited = field.value.split('\n')
+#             if 'invited' not in locals():
+#                 return
+#             invited_str = ""
+#             if invited[0] != "No players":
+#                 for person in invited:
+#                     invited_str += '<' + person.split('<')[1] + ' '
+#                 sent_msg = await per_gen.send("New event **{}** at <#{}>!\n".format(message.embeds[0].title, PrivateVals.peruni_eventschan_id)\
+#                     + invited_str + "Confirm your attendance now. :white_check_mark:")
+#                 await sent_msg.add_reaction('✅')
+#             else:
+#                 await per_gen.send("New event **{}** at <#{}>!\n".format(message.embeds[0].title, PrivateVals.peruni_eventschan_id)\
+#                     + invited_str + "Join the event by clicking + in <#{}>.".format(PrivateVals.peruni_eventschan_id))
+#     except IndexError:
+#         pass
 
-#runs a bunch of shit in the background every minute
+# runs once in the background every minute
 async def background_hook_loop():
     await client.wait_until_ready()
     while not client.is_closed():
@@ -137,19 +182,60 @@ async def background_hook_loop():
         if datetime.now().weekday() == 5 and datetime.now().hour == 8 and datetime.now().minute == 0:
             await weekly_msg_stats() 
 
+        await siege_stopper_check()
+        await uni_time_triggers_check()
+        await new_vc_join_check()
+
+        if globals()['fm_bool']:
+            asyncio.get_event_loop().create_task(last_fm_update(client))
+
         nextmin = 60 - datetime.now().second
         await asyncio.sleep(nextmin)
+
+# -- background_hook_loop hook defs --
+
+vc_dic = {}
+async def new_vc_join_check():
+    guild = client.get_guild(PrivateVals.peruni_guild_id)
+    peruni_gen_channel = client.get_channel(PrivateVals.peruni_gen_id)
+
+    for vc in guild.voice_channels:
+        if vc.name not in vc_dic:
+            vc_dic[vc.name] = 0
+
+        if len(vc.members) > 0 and vc_dic[vc.name] == 0:
+            await peruni_gen_channel.send("@here "+vc.name+" is open")
+
+        vc_dic[vc.name] = len(vc.members)
+
+async def last_fm_update(client):
+    #get json of last 1 track
+    try:
+        api = "http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=Forever_Walking&api_key={}&format=json&limit=1".format(PrivateVals.last_fm_api_key)
+        json_dict = await util.get_json(api)
+
+        if json_dict and '@attr' in json_dict['recenttracks']['track'][0]:
+            status = json_dict['recenttracks']['track'][0]['name'] + ' by ' + json_dict['recenttracks']['track'][0]['artist']['#text']
+            await client.change_presence(activity = discord.Game(name=status))
+        else:
+            await client.change_presence(activity = discord.Activity(name='last.fm', type=discord.ActivityType.listening))
+    except KeyError as key_e:
+        await void.send("last_fm keyerror:"+str(json_dict))
+    except Exception as e:
+        logging.error(traceback.format_exc())
+        void = client.get_channel(PrivateVals.void)
+        await void.send("last_fm exception:"+str(e))
 
 #check member status and store time (in bot's tz) in Member_lastseen dic
 async def last_seen_background():
     members = client.get_all_members()
     for member in members:
         if str(member.status) != "offline" and not member.bot:
-            Member_lastseen[member.name] = datetime.now()
+            Member_lastseen[util.getUsername(member)] = datetime.now()
 
 #sends weekly msg count stats to channel
 async def weekly_msg_stats():
-    channel = client.get_channel(senInfo.peruni_gen_id)
+    channel = client.get_channel(PrivateVals.peruni_gen_id)
 
     #unpin last week's message
     if Last_week_stat_msg[0]:
@@ -187,7 +273,56 @@ async def weekly_msg_stats():
     Temp_msg_count_global.clear()
     Temp_msg_count_global['date\nx'] = datetime.now()
 
-# #commands...
+# kicks people off voice channels after assigned time
+async def siege_stopper_check():
+    guild = client.get_guild(PrivateVals.peruni_guild_id)
+    peruni_gen_channel = client.get_channel(PrivateVals.peruni_gen_id)
+
+    time_now = datetime.now()
+
+    #shift reset time by 24 hours at 0:00
+    if time_now.hour == 8 and time_now.minute == 0:
+        for key in siege_stopper_dic:
+            siege_stopper_dic[key]['time_reset'] += timedelta(hours=24)
+            siege_stopper_dic[key]['day_reset'] = True
+
+    for key, person_dict in siege_stopper_dic.items():
+        #if time hits
+        if time_now >= person_dict['time'] + person_dict['active_delta'] and time_now < person_dict['time'] + person_dict['end_delta']:
+            user = guild.get_member(key)
+            if str(user.status) != 'offline': #online
+                person_dict['active'] = True
+
+                if user.voice:
+                    try:
+                        await user.move_to(None, reason='stopper command')
+                        await peruni_gen_channel.send('Get out of there.')
+                    except discord.errors.Forbidden:
+                        await user.send(content='REEEEEEEEEEEEE set a timer')
+                
+                await user.send(content=person_dict['reason'], tts=True)
+
+        if person_dict['active'] or person_dict['day_reset']:
+            user = guild.get_member(key)
+            if str(user.status) == 'offline' or (person_dict['day_reset'] and not person_dict['active']):
+                user = guild.get_member(key)
+                person_dict['active'] = False
+                if person_dict['day_reset']:
+                    person_dict['time'] = person_dict['time_reset']
+                    person_dict['active_delta'] = timedelta(0)
+                    person_dict['delays'] = 0
+                    person_dict['day_reset'] = False
+
+async def uni_time_triggers_check():
+    time_now = datetime.now()
+
+    for time_key in uni_time_triggers:
+        # print('check', time_key == time_now.strftime("%H:%M on %B %-d, %Y"), time_key, time_now.strftime("%H:%M on %B %-d, %Y"))
+        if time_key == time_now.strftime("%H:%M on %B %-d, %Y"):
+            for user_key in uni_time_triggers[time_key]:
+                await uni_time_triggers[time_key][user_key]['channel'].send('From <@'+str(user_key)+'>: '+uni_time_triggers[time_key][user_key]['msg'])
+    
+# -- commands... --
 
 @client.command(pass_context=True, brief="Accepts @user & displays their last online time.")
 async def lastseen(ctx, user: discord.User):
@@ -195,12 +330,12 @@ async def lastseen(ctx, user: discord.User):
     channel = ctx.channel
 
     try:
-        time = Member_lastseen[user.name]
+        time = Member_lastseen[util.getUsername(user)]
     except KeyError:
         await channel.send("Have not seen user since at least %s (HKT)." % (Bot_start_time))
         return
 
-    await channel.send(format_time(time) + '\n On (HK Date): ' + time.strftime("%m/%d"))
+    await channel.send(util.format_time(time) + '\n On (HK Date): ' + time.strftime("%m/%d"))
 
 @lastseen.error
 async def lastseen_error(ctx, error):
@@ -221,30 +356,18 @@ async def time(ctx):
     print(str(datetime.now()) + " time ran by " + str(ctx.message.author))
     channel = ctx.channel
 
-    if str(ctx.message.author) == PrivateInfo.arm:
-        await channel.send(PrivateInfo.appreciate_msg)
+    if str(ctx.message.author) == PrivateVals.arm:
+        await channel.send(PrivateVals.appreciate_msg)
         return
 
-    await channel.send(format_time(datetime.now()))
+    await channel.send(util.format_time(datetime.now()))
 
-@client.command(pass_context=True, brief="Utilizes quantum tunneling to probe a @user for gayness particles.")
-async def gayornot(ctx, user: discord.User):
-    print(str(datetime.now()) + " gayornot ran by " + str(ctx.message.author))
-    channel = ctx.channel
+@client.command(pass_context=True, brief="Utilizes quantum tunneling to probe a @user for particles.")
+async def yayornot(ctx, user: discord.User):
+    await encapLogic.yayornot(ctx, user)
 
-    await channel.send("**Processing...**")
-    await asyncio.sleep(3)
-
-    if str(ctx.message.author) == senInfo.kevin:
-        await channel.send("You're gay Kevin.")
-        return
-    if str(user) == senInfo.author or int(user.display_name, 36)%2 == 0:
-        await channel.send("gayness particles not found.")
-    else:
-        await channel.send("gay.")
-
-@gayornot.error
-async def gayornot_error(ctx, error):
+@yayornot.error
+async def yayornot_error(ctx, error):
     await lastseen_error(ctx, error)
 
 @client.command(pass_context=True)
@@ -252,7 +375,7 @@ async def suck_it(ctx):
     print(str(datetime.now()) + " suck_it ran by " + str(ctx.message.author))
     channel = ctx.channel
 
-    msg = await channel.send(senInfo.emoji_pop+senInfo.emoji_kev)
+    msg = await channel.send(PrivateVals.emoji_pop+PrivateVals.emoji_kev)
     await asyncio.sleep(1)
 
     delay = 0.05
@@ -260,25 +383,25 @@ async def suck_it(ctx):
         for i in range(2):
             space = ' '*(i+1)*2
             await asyncio.sleep(delay)
-            await msg.edit(content=senInfo.emoji_pop + space + senInfo.emoji_kev)
+            await msg.edit(content=PrivateVals.emoji_pop + space + PrivateVals.emoji_kev)
         for i in range(1, -1, -1):
             space = ' '*i*2
             await asyncio.sleep(delay)
-            await msg.edit(content=senInfo.emoji_pop + space + senInfo.emoji_kev)
+            await msg.edit(content=PrivateVals.emoji_pop + space + PrivateVals.emoji_kev)
         await asyncio.sleep(5)
     for i in range(2):
         space = ' '*(i+1)*2
         await asyncio.sleep(delay)
-        await msg.edit(content=senInfo.emoji_pop + space + senInfo.emoji_kev)
-    await msg.edit(content=senInfo.emoji_pop+"▫️▫️▫️"+senInfo.emoji_kev)
+        await msg.edit(content=PrivateVals.emoji_pop + space + PrivateVals.emoji_kev)
+    await msg.edit(content=PrivateVals.emoji_pop+"▫️▫️▫️"+PrivateVals.emoji_kev)
 
-@client.command(pass_context=True, brief="Schedule a game time with friends! Takes no arguments.")
-async def gametime(ctx):
-    print(str(datetime.now()) + " gametime ran by " + str(ctx.message.author))
-    await ctx.channel.send("This command is still under construction.")
-    await Game_time_ui.new_gametime(ctx)
+# @client.command(pass_context=True, brief="Schedule a game time with friends! Takes no arguments.")
+# async def gametime(ctx):
+#     print(str(datetime.now()) + " gametime ran by " + str(ctx.message.author))
+#     await ctx.channel.send("This command is still under construction.")
+#     await Game_time_ui.new_gametime(ctx)
 
-'''add next image, and troll'''
+#TODO: Rus
 #blatantly copied from NotSoBot
 @client.command(pass_context=True, aliases=['image', 'photo', 'img'], brief="Blatant copy of NotSoBot's image search command.", cooldown=(3, 5))
 @commands.cooldown(rate=2, per=15.0, type=commands.BucketType.user)
@@ -296,42 +419,65 @@ async def im(ctx, *, search:str):
                 use_count = int(f.read())
     except IOError as e:
         if e.errno == errno.ENOENT:
-            print ('im: day restart?', datetime.now())
+            print('im: day restart?', datetime.now())
         else:
-            print ('im: some other file io ERROR')
+            print('im: some other file io ERROR')
         use_count = 0
 
+    #use_count check
     if use_count > 95:
         await channel.send("Exceeded 100 daily free searches given by Google API. Pay me so I can pay Google for more searches.")
         return
 
+    choice = 0#random.randint(0, 9)
     #request
     try:
-        key = senInfo.google_cus_search_json_api_key
+        key = PrivateVals.google_cus_search_json_api_key
         api = "https://www.googleapis.com/customsearch/v1?key={0}&cx=015418243597773804934:it6asz9vcss&searchType=image&q={1}".format(key, urllib.parse.quote(search))
-        load = await get_json(api)
+        load = await util.get_json(api)
         assert 'error' not in load.keys() and 'items' in load.keys()
         assert len(load)
-        rand = random.choice(load['items'])
+        # rand = random.choice(load['items'])
         # print([x['link'] for x in load['items']])
-        image = rand['link']
-        await channel.send(image)
-
-        use_count += 1
-        with open("savefiles/daily_search_use.txt", 'w') as f:
-            f.write(str(use_count))
+        # image = rand['link']
+        desc = lambda choice: '[Result '+str(choice+1)+']'+'('+load['items'][choice]['link']+')'
+        embed_sent = discord.Embed(title='Image Search Results for "'+search+'"', rich=True, description=desc(choice), colour=53633)
+        embed_sent.set_author(name=ctx.message.author.display_name, icon_url=ctx.message.author.avatar_url)
+        embed_sent.set_image(url=load['items'][choice]['link'])
+        embed_sent.set_footer(text="Page "+str(choice+1)+"/10")
+        image_msg = await channel.send(embed=embed_sent)
     except discord.errors.Forbidden:
         await channel.send("no send_file permission")
         return
     except AssertionError:
-        # scrap = await self.google_scrap(search, True if level != 'off' else False, True)
-        scrap = False
-        if scrap:
-            await channel.send(scrap)
-        else:
-            await channel.send(":warning: `API Quota Reached or Invalid Search`")
+        await channel.send(":warning: `API Quota Reached or Invalid Search`")
+        return
     except:
         raise
+    
+    #use_count update
+    use_count += 1
+    with open("savefiles/daily_search_use.txt", 'w') as f:
+        f.write(str(use_count))
+
+    #scrolling
+    await util.add_reactions(image_msg, ['⬅️', '➡️'])
+
+    while True:
+        reaction = await util.reaction_reponse_listener(image_msg, client, True)
+        if reaction is None:
+            break
+
+        if reaction[0].emoji == '➡️':
+            choice = (choice + 1) % len(load['items'])
+        elif reaction[0].emoji == '⬅️':
+            choice = (choice - 1) % len(load['items'])
+
+        embed_sent.description = desc(choice)
+        embed_sent.set_image(url=load['items'][choice]['link'])
+        embed_sent.set_footer(text="Page "+str(choice+1)+"/10")
+        await image_msg.edit(embed=embed_sent)
+        # await channel.send(load['items'][choice]['fileFormat'])
 
 @im.error
 async def im_error(ctx, error):
@@ -340,6 +486,198 @@ async def im_error(ctx, error):
 
     await channel.send("Hi! Command 'im' says: "+str(error))
 
+@client.command(pass_context=True, brief="Stops Siege from ruining your life.", help="testing string")
+async def stopper(ctx, time: str, *args):
+    print(str(datetime.now()) + " stopper ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    #optimize later and help menu lol
+    date = dateparser.parse(time, languages=['en'])
+    if date == None:
+        await channel.send("dateparser did not understand you")
+        return
+
+    if date < datetime.now():
+        await channel.send("might not go off")
+
+    #reason parsing
+    reason = ""
+    for arg in args:
+        reason += arg + ' '
+    if len(reason) == 0:
+        reason = "Hi, it's time bro."
+
+    await channel.send("args recived: "+"time="+time+", reason="+reason)
+    await channel.send("parsed time: " + date.strftime("%m/%d/%Y, %H:%M:%S") + " tz: " + str(date.tzinfo))
+
+    #op to save time only later
+    siege_stopper_dic[ctx.message.author.id] = {'time': date, 'reason': reason, 'time_reset': date, 'day_reset': False,
+        'end_delta': timedelta(hours=6), 'active_delta': timedelta(hours=0), 'active': False, 'delays': 0}
+
+@stopper.error
+async def stopper_error(ctx, error):
+    print("@Error:", ctx.message.content, error, ctx.guild, sep=' | ')
+    channel = ctx.channel
+
+    await channel.send("Hi! Command 'siege_stopper' says: "+str(error))
+
+@client.command(pass_context=True, brief="Status of siege_stopper")
+async def stopper_dict(ctx):
+    print(str(datetime.now()) + " stopper_status ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    await channel.send(siege_stopper_dic)
+
+@client.command(pass_context=True, brief="Delays the effect of stopper in minutes")
+async def will_sleep(ctx, minutes: int):
+    print(str(datetime.now()) + " will_sleep ran by " + str(ctx.message.author))
+    channel = ctx.channel
+    
+    person_dict = siege_stopper_dic[ctx.message.author.id]
+
+    #7 second rule
+    await channel.send("Please confirm in 7 seconds...")
+    await asyncio.sleep(7.0)
+    await channel.send("you sure?")
+
+    def check(m):
+        return m.content == 'i am sure' and m.author == ctx.message.author
+
+    msg = await client.wait_for('message', check=check, timeout=10.0)
+    # await channel.send('Hello {.author}!'.format(msg))
+
+    #perform delay
+    if minutes > 60:
+        await channel.send("A bit too much don't you think? ;)")
+    
+    if ctx.message.author.id in siege_stopper_dic.keys() and person_dict['delays'] < 3:
+        person_dict['active_delta'] += timedelta(minutes=minutes)
+        await channel.send('Stopped delayed by '+str(minutes)+' minutes '+str(person_dict['time'] + person_dict['active_delta']))
+
+        person_dict['delays'] += 1
+        if person_dict['delays'] == 3:
+            await channel.send('This is the last time you can delay me, use it wisely.')
+        elif person_dict['delays'] == 2:
+            await channel.send('You are on your second delay.')
+    else:
+        await channel.send('Soz you used all your delays. Now buzz off.')
+
+@will_sleep.error
+async def will_sleep_error(ctx, error):
+    print("@Error:", ctx.message.content, error, ctx.guild, sep=' | ')
+    channel = ctx.channel
+
+    await channel.send("Hi! Command 'will_sleep' says: "+str(error))
+
+@client.command(pass_context=True, brief="Returns emoji IDs of the server.")
+async def get_emojis(ctx):
+    print(str(datetime.now()) + " get_emojis ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    await channel.send(channel.guild.emojis)
+
+@client.command(pass_context=True,  aliases=['remindme'], brief='Reminds you at specificed time (-remindme "date/time" @tags msg)', 
+    help='example: -remindme "12pm EST March 12" @roboto all hail')
+async def schping(ctx, time: str, *args):
+    print(str(datetime.now()) + " remindme ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    date = dateparser.parse(time, languages=['en'])
+    if date == None:
+        await channel.send("dateparser did not understand you")
+        return
+
+    #msg parsing
+    msg = ""
+    for arg in args:
+        msg += arg + ' '
+    if len(msg) == 0:
+        msg = "Hey, it's your reminder speaking."
+
+    tz_string = ' ({})'.format(str(date.tzinfo)) if date.tzinfo != None else ''
+    time_code = date.strftime("%H:%M on %B %-d, %Y")
+    await channel.send(msg+'\nI will remind you at ' + time_code + tz_string)
+    
+    if len(tz_string) > 0:
+        date = (date - date.tzinfo.utcoffset(date) + timedelta(hours=8)).replace(tzinfo=None)
+        time_code = date.strftime("%H:%M on %B %-d, %Y")
+        await channel.send('AKA '+time_code+' HKT')
+
+    #op to save time only later
+    uni_time_triggers[time_code] = {ctx.message.author.id: {'name': ctx.message.author.name, 'msg': msg, 'channel': channel}}
+
+@client.command(pass_context=True,  aliases=['listreminders'], brief="List all scheduled pings/reminders on specified day")
+async def listsch(ctx, *args):
+    print(str(datetime.now()) + " lssch ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    time = ""
+    for arg in args:
+        time += arg + ' '
+
+    if time == 'all ' and str(ctx.message.author) == PrivateVals.author:
+        msg_block = ''
+        for i, c in enumerate(str(uni_time_triggers)):
+            if i%2000 == 0 and i != 0:
+                await channel.send(msg_block)
+                msg_block = ''
+            else:
+                msg_block += c
+        await channel.send(msg_block)
+
+    date = dateparser.parse(time, languages=['en'])
+    if date == None:
+        await channel.send("dateparser did not understand you")
+        return
+
+    tz_string = ' ({})'.format(str(date.tzinfo)) if date.tzinfo != None else ''
+    if len(tz_string) > 0:
+        date = (date - date.tzinfo.utcoffset(date) + timedelta(hours=8)).replace(tzinfo=None)
+    time_code = date.strftime("%B %-d, %Y")
+
+    msg_block = ''
+    flag = False
+    await channel.send(time_code)
+    for time_key in uni_time_triggers:
+        if time_key.endswith(time_code):
+            for user_key in uni_time_triggers[time_key]:
+                flag = True
+                msg_block += '**'+uni_time_triggers[time_key][user_key]['name']+'**\n'
+                msg_block += time_key+': '+uni_time_triggers[time_key][user_key]['msg']+'\n'
+
+    if flag:
+        await channel.send(msg_block)
+    else:
+        await channel.send("Nothing found.")
+
+@client.command(pass_context=True,  aliases=['delreminder'], brief="Delete scheduled ping/reminder of a given time")
+async def delping(ctx, *args):
+    print(str(datetime.now()) + " remindme ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    time = ""
+    for arg in args:
+        time += arg + ' '
+
+    date = dateparser.parse(time, languages=['en'])
+    if date == None:
+        await channel.send("dateparser did not understand you")
+        return
+
+    tz_string = ' ({})'.format(str(date.tzinfo)) if date.tzinfo != None else ''
+    if len(tz_string) > 0:
+        date = (date - date.tzinfo.utcoffset(date) + timedelta(hours=8)).replace(tzinfo=None)
+    time_code = date.strftime("%H:%M on %B %-d, %Y")
+
+    if time_code in uni_time_triggers:
+        for user_id in uni_time_triggers[time_code]:
+            if ctx.message.author.id == user_id:
+                del uni_time_triggers[time_code][user_id]
+                await channel.send("Delete successful")
+                return
+
+    await channel.send("You do not own any reminder at "+time_code)
+
 '''
 stuff to do:
 command ran function
@@ -347,14 +685,19 @@ error outputs to chat if arguments are wrong
 ai stuff
 refactor to be class based
 
-remindme/them
-game time planner
+background_loop optimization, await/sch
+redis/memcache 
+
+commands:
+siege_stopper
+tz conversion
+last.fm hook
 
 functions to make
 '''
 
 #client.loop.create_task(last_seen_background())
-client.run(senInfo.token)
+client.run(PrivateVals.token)
 
 '''
 @client.command(pass_context=True, brief="Displays info about a user.")
@@ -373,12 +716,12 @@ async def info(ctx, user: discord.Member):
 @info.error
 async def info_error(ctx, error):
     channel = ctx.channel
-    void = client.get_channel(senInfo.void)
+    void = client.get_channel(PrivateVals.void)
     code = str(ctx).split(" ")
     if code[2] + code[3] == "notfound":
         await channel.send("User not found. (Capitalization is required.)")
     else:
-        await void.send("GAYORNOT ERROR:")
+        await void.send("INFO ERROR:")
         await void.send(ctx)
 
 @client.command(pass_context=True, brief="Displays info about a channel.")
@@ -391,7 +734,7 @@ async def chan(ctx, in_chan: discord.channel):
 @chan.error
 async def chan_error(ctx, error):
     channel = ctx.channel
-    void = client.get_channel(senInfo.void)
+    void = client.get_channel(PrivateVals.void)
     code = str(ctx).split(" ")
     if code[2] + code[3] == "notfound.":
         await channel.send(ctx)

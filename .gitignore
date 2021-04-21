@@ -1,6 +1,6 @@
-PrivateInfo.py
+PrivateVals.py
+EncapLogic.py
 discord.log
 __pycache__
-member_lastseen.json
-temp_msg_count_global.json
 savefiles/
+.vscode
