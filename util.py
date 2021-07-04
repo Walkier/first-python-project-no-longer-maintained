@@ -59,6 +59,17 @@ async def reaction_reponse_listener(msg, client, remove=False, emojis=None, sec=
 
     return reaction, user
 
+async def waitForConfirm(client, channel, author_id, confirm_msg):
+    await channel.send("Please confirm in 7 seconds...")
+    await asyncio.sleep(7.0)
+    await channel.send(confirm_msg)
+
+    def check(m):
+        return m.content == 'i am sure' and m.author.id == author_id
+
+    msg = await client.wait_for('message', check=check, timeout=7.0)
+    return True
+
 def getUsername(user):
     return user.name + '#' + user.discriminator
 

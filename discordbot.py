@@ -1,4 +1,4 @@
-#walkbot 0.2.0 by Walkier
+#walkbot 0.2.0.1 by Walkier
 #python 3.5.3 on pi
 
 # SEE async def ping(ctx) for definition of the simplest command
@@ -182,9 +182,12 @@ async def background_hook_loop():
         if datetime.now().weekday() == 5 and datetime.now().hour == 8 and datetime.now().minute == 0:
             await weekly_msg_stats() 
 
-        await siege_stopper_check()
-        await uni_time_triggers_check()
-        await new_vc_join_check()
+        try:
+            await siege_stopper_check()
+            await uni_time_triggers_check()
+            await new_vc_join_check()
+        except Exception as e:
+            print("Background loop exception", e)
 
         if globals()['fm_bool']:
             asyncio.get_event_loop().create_task(last_fm_update(client))
@@ -296,7 +299,7 @@ async def siege_stopper_check():
                 if user.voice:
                     try:
                         await user.move_to(None, reason='stopper command')
-                        await peruni_gen_channel.send('Get out of there.')
+                        await peruni_gen_channel.send('Get out of there.\nReason: '+str(person_dict['reason']))
                     except discord.errors.Forbidden:
                         await user.send(content='REEEEEEEEEEEEE set a timer')
                 
@@ -328,6 +331,8 @@ async def uni_time_triggers_check():
 async def lastseen(ctx, user: discord.User):
     print(str(datetime.now()) + " lastseen ran by " + str(ctx.message.author))
     channel = ctx.channel
+
+    await ctx.message.delete()
 
     try:
         time = Member_lastseen[util.getUsername(user)]
@@ -533,6 +538,8 @@ async def will_sleep(ctx, minutes: int):
     print(str(datetime.now()) + " will_sleep ran by " + str(ctx.message.author))
     channel = ctx.channel
     
+    # TODO: tz support, dm after kick, enablers
+
     person_dict = siege_stopper_dic[ctx.message.author.id]
 
     #7 second rule
@@ -549,6 +556,7 @@ async def will_sleep(ctx, minutes: int):
     #perform delay
     if minutes > 60:
         await channel.send("A bit too much don't you think? ;)")
+        return
     
     if ctx.message.author.id in siege_stopper_dic.keys() and person_dict['delays'] < 3:
         person_dict['active_delta'] += timedelta(minutes=minutes)
