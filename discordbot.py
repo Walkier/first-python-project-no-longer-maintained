@@ -15,7 +15,7 @@ import urllib.parse
 import pdb
 
 import util
-from PrivateVals import PrivateVals
+from PrivateVals import PrivateValsV1 as PrivateVals
 from PublicVals import PublicVals
 from EncapLogic import EncapLogic
 # from GameTime import GameTimeUI, GameTime
@@ -200,7 +200,7 @@ async def background_hook_loop():
 vc_dic = {}
 async def new_vc_join_check():
     guild = client.get_guild(PrivateVals.peruni_guild_id)
-    peruni_gen_channel = client.get_channel(PrivateVals.peruni_gen_id)
+    peruni_gen_channel = client.get_channel(PrivateVals.peruni_gen_id) # TODO: require generalization 
 
     for vc in guild.voice_channels:
         if vc.name not in vc_dic:
@@ -279,7 +279,7 @@ async def weekly_msg_stats():
 # kicks people off voice channels after assigned time
 async def siege_stopper_check():
     guild = client.get_guild(PrivateVals.peruni_guild_id)
-    peruni_gen_channel = client.get_channel(PrivateVals.peruni_gen_id)
+    peruni_gen_channel = client.get_channel(PrivateVals.peruni_gen_id) # TODO: require generalization
 
     time_now = datetime.now()
 
@@ -299,7 +299,7 @@ async def siege_stopper_check():
                 if user.voice:
                     try:
                         await user.move_to(None, reason='stopper command')
-                        await peruni_gen_channel.send('Get out of there.\nReason: '+str(person_dict['reason']))
+                        await peruni_gen_channel.send('Get out of there.\nReason: '+str(person_dict['reason'])) # TODO: require generalization
                     except discord.errors.Forbidden:
                         await user.send(content='REEEEEEEEEEEEE set a timer')
                 
