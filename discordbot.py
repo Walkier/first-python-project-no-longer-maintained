@@ -1,4 +1,4 @@
-#walkbot 0.2.0.1 by Walkier
+#walkbot 0.2.1.0 by Walkier
 #python 3.5.3 on pi
 
 # SEE async def ping(ctx) for definition of the simplest command
@@ -54,6 +54,9 @@ except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
     Temp_msg_count_global = {'date\nx': Bot_start_time}
 Last_week_stat_msg = [None]
 
+uni_instance_dict = {
+    'vc_join_sub': { str(PrivateVals.peruni_guild_id): PrivateVals.peruni_gen_id },
+}
 siege_stopper_dic = {}
 encapLogic = EncapLogic(client)
 
@@ -199,17 +202,18 @@ async def background_hook_loop():
 
 vc_dic = {}
 async def new_vc_join_check():
-    guild = client.get_guild(PrivateVals.peruni_guild_id)
-    peruni_gen_channel = client.get_channel(PrivateVals.peruni_gen_id) # TODO: require generalization 
+    for guild_id in uni_instance_dict['vc_join_sub']:
+        guild = client.get_guild(int(guild_id))
+        peruni_gen_channel = client.get_channel(uni_instance_dict['vc_join_sub'][guild_id])
+        
+        for vc in guild.voice_channels:
+            if vc.name not in vc_dic:
+                vc_dic[vc.name] = 0
 
-    for vc in guild.voice_channels:
-        if vc.name not in vc_dic:
-            vc_dic[vc.name] = 0
+            if len(vc.members) > 0 and vc_dic[vc.name] == 0:
+                await peruni_gen_channel.send("@here "+vc.name+" is open")
 
-        if len(vc.members) > 0 and vc_dic[vc.name] == 0:
-            await peruni_gen_channel.send("@here "+vc.name+" is open")
-
-        vc_dic[vc.name] = len(vc.members)
+            vc_dic[vc.name] = len(vc.members)
 
 async def last_fm_update(client):
     #get json of last 1 track
@@ -327,6 +331,35 @@ async def uni_time_triggers_check():
     
 # -- commands... --
 
+@client.command(pass_context=True, brief="Pings client.")
+async def ping(ctx):
+    print(str(datetime.now()) + " ping ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    await channel.send("pew")
+
+@client.command(pass_context=True, brief="subscribes this channel to updates of people joining voice call", \
+    help="example usage:\n-subscribe_voice_call_join true\n-subscribe_voice_call_join false")
+async def subscribe_voice_call_join(ctx, enable_boolean: bool):
+    print(str(datetime.now()) + " subscribe_voice_call_join ran by " + str(ctx.message.author) + ' ' + str(ctx.message.guild))
+    channel = ctx.channel
+
+    if enable_boolean:
+        uni_instance_dict['vc_join_sub'][str(ctx.message.guild.id)] = ctx.channel.id
+        await channel.send("channel is now subscribed to voice channel joins")
+    elif not enable_boolean:
+        uni_instance_dict['vc_join_sub'].pop(str(ctx.message.guild.id), None)
+        await channel.send("channel is now unsubscribed to voice channel joins")
+    else:
+        await channel.send("something went wrong")
+
+@subscribe_voice_call_join.error
+async def lastseen_error(ctx, error):
+    print("@Error:", ctx.message.content, error, ctx.guild, sep=' | ')
+    channel = ctx.channel
+
+    await channel.send(str(error))
+
 @client.command(pass_context=True, brief="Accepts @user & displays their last online time.")
 async def lastseen(ctx, user: discord.User):
     print(str(datetime.now()) + " lastseen ran by " + str(ctx.message.author))
@@ -340,7 +373,7 @@ async def lastseen(ctx, user: discord.User):
         await channel.send("Have not seen user since at least %s (HKT)." % (Bot_start_time))
         return
 
-    await channel.send(util.format_time(time) + '\n On (HK Date): ' + time.strftime("%m/%d"))
+    await channel.send('Hi ' +str(ctx.message.author.display_name)+ ', this person was **last seen**:\n' + util.format_time(time) + '\n On (HK Date): ' + time.strftime("%m/%d"))
 
 @lastseen.error
 async def lastseen_error(ctx, error):
@@ -348,13 +381,6 @@ async def lastseen_error(ctx, error):
     channel = ctx.channel
 
     await channel.send(str(error)+"\nPlease tag user with @ symbol.")
-
-@client.command(pass_context=True, brief="Pings client.")
-async def ping(ctx):
-    print(str(datetime.now()) + " ping ran by " + str(ctx.message.author))
-    channel = ctx.channel
-
-    await channel.send("pew")
 
 @client.command(pass_context=True, brief="Shows time of various timezones.")
 async def time(ctx):
@@ -379,6 +405,8 @@ async def yayornot_error(ctx, error):
 async def suck_it(ctx):
     print(str(datetime.now()) + " suck_it ran by " + str(ctx.message.author))
     channel = ctx.channel
+
+    # encap and server whitelist
 
     msg = await channel.send(PrivateVals.emoji_pop+PrivateVals.emoji_kev)
     await asyncio.sleep(1)
@@ -618,6 +646,8 @@ async def schping(ctx, time: str, *args):
 async def listsch(ctx, *args):
     print(str(datetime.now()) + " lssch ran by " + str(ctx.message.author))
     channel = ctx.channel
+
+    # todo show only by server
 
     time = ""
     for arg in args:
