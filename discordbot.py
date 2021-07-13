@@ -1,4 +1,4 @@
-#walkbot 0.2.1.0 by Walkier
+#walkbot 0.2.1 comm.0 by Walkier
 #python 3.5.3 on pi
 
 # SEE async def ping(ctx) for definition of the simplest command
@@ -99,7 +99,7 @@ async def on_ready():
 @client.event
 async def on_message(message):
     #prevent echo and bots
-    if message.author == client.user or message.author.bot:
+    if message.author == client.user or message.author.bot or message.channel.id in PrivateVals.channel_blacklist:
         return
 
     #admin_commands hook
@@ -339,9 +339,9 @@ async def ping(ctx):
     await channel.send("pew")
 
 @client.command(pass_context=True, brief="subscribes this channel to updates of people joining voice call", \
-    help="example usage:\n-subscribe_voice_call_join true\n-subscribe_voice_call_join false")
-async def subscribe_voice_call_join(ctx, enable_boolean: bool):
-    print(str(datetime.now()) + " subscribe_voice_call_join ran by " + str(ctx.message.author) + ' ' + str(ctx.message.guild))
+    help="example usage:\n-vc_join_sub true\n-vc_join_sub false")
+async def vc_join_sub(ctx, enable_boolean: bool):
+    print(str(datetime.now()) + " vc_join_sub ran by " + str(ctx.message.author) + ' ' + str(ctx.message.guild.id))
     channel = ctx.channel
 
     if enable_boolean:
@@ -353,7 +353,7 @@ async def subscribe_voice_call_join(ctx, enable_boolean: bool):
     else:
         await channel.send("something went wrong")
 
-@subscribe_voice_call_join.error
+@vc_join_sub.error
 async def lastseen_error(ctx, error):
     print("@Error:", ctx.message.content, error, ctx.guild, sep=' | ')
     channel = ctx.channel
@@ -559,6 +559,8 @@ async def stopper_dict(ctx):
     print(str(datetime.now()) + " stopper_status ran by " + str(ctx.message.author))
     channel = ctx.channel
 
+    # TODO: lim access 
+
     await channel.send(siege_stopper_dic)
 
 @client.command(pass_context=True, brief="Delays the effect of stopper in minutes")
@@ -605,12 +607,12 @@ async def will_sleep_error(ctx, error):
 
     await channel.send("Hi! Command 'will_sleep' says: "+str(error))
 
-@client.command(pass_context=True, brief="Returns emoji IDs of the server.")
-async def get_emojis(ctx):
+@client.command(pass_context=True, brief="Returns emoji IDs of the server and channel ID.")
+async def get_ids(ctx):
     print(str(datetime.now()) + " get_emojis ran by " + str(ctx.message.author))
     channel = ctx.channel
 
-    await channel.send(channel.guild.emojis)
+    await channel.send(str(channel.guild.emojis) + '\nChannel ID: '+ str(channel.id))
 
 @client.command(pass_context=True,  aliases=['remindme'], brief='Reminds you at specificed time (-remindme "date/time" @tags msg)', 
     help='example: -remindme "12pm EST March 12" @roboto all hail')
@@ -646,6 +648,9 @@ async def schping(ctx, time: str, *args):
 async def listsch(ctx, *args):
     print(str(datetime.now()) + " lssch ran by " + str(ctx.message.author))
     channel = ctx.channel
+
+    await channel.send("Temporarily disabled soz")
+    return
 
     # todo show only by server
 
