@@ -66,7 +66,7 @@ async def on_ready():
     print("I am ", client.user.name, datetime.now())
     print(str(client.guilds))
 
-    await client.change_presence(activity = discord.Game(name="-help"))
+    await client.change_presence(activity = discord.Game(name="-help by Walker"))
 
     chamber = client.get_channel(PrivateVals.chamber)
     void = client.get_channel(PrivateVals.void)
@@ -140,6 +140,9 @@ async def admin_commands(message):
         with open("savefiles/uni_time_triggers.json", 'w') as f:
             f.write(json.dumps(uni_time_triggers, default=util.serialize_uni_time_triggers))
         await message.channel.send("SHUTTING DOWN...")
+        if datetime.now() > Bot_start_time + timedelta(minutes=5):
+            for guild, channel in uni_instance_dict['vc_join_sub'].items():
+                await client.get_channel(channel).send("vc_join_sub unsubbed, bot shutting down")
         await client.close()
     elif(message.content.split()[0] == "$status"):
         await client.change_presence(activity = discord.Game(name = message.content[8:]))
@@ -188,7 +191,8 @@ async def background_hook_loop():
         try:
             await siege_stopper_check()
             await uni_time_triggers_check()
-            await new_vc_join_check()
+            if datetime.now() > Bot_start_time + timedelta(minutes=5):
+                await new_vc_join_check()
         except Exception as e:
             print("Background loop exception", e)
 
@@ -270,7 +274,7 @@ async def weekly_msg_stats():
     string_buffer = string_buffer[:-2]
 
     msg = await channel.send("**Weekly Message Count Breakdown** ("+statStartDate+" - "+datetime.strftime(datetime.now(),'%m/%d')+"):"+ \
-        "\nLoneliest ->**" + string_buffer + "**<- Nonexistent")
+        "\nLoneliest ->**" + string_buffer + "**<- Nonexistent" + "\nTotal: " + str(total_msgs))
     
     await msg.pin()
     Last_week_stat_msg[0] = msg
@@ -300,12 +304,15 @@ async def siege_stopper_check():
             if str(user.status) != 'offline': #online
                 person_dict['active'] = True
 
-                if user.voice:
-                    try:
-                        await user.move_to(None, reason='stopper command')
-                        await peruni_gen_channel.send('Get out of there.\nReason: '+str(person_dict['reason'])) # TODO: require generalization
-                    except discord.errors.Forbidden:
-                        await user.send(content='REEEEEEEEEEEEE set a timer')
+                for guild in client.guilds:
+                    guild_user = guild.get_member(key)
+                    if guild_user.voice:
+                        try:
+                            await guild_user.move_to(None, reason='stopper command')
+                            if str(guild.id) in uni_instance_dict['vc_join_sub']:
+                                await uni_instance_dict['vc_join_sub'][str(guild.id)].send('Get out of there.\nReason: '+str(person_dict['reason'])) # TODO: require generalization
+                        except discord.errors.Forbidden:
+                            await guild_user.send(content='REEEEEEEEEEEEE set a timer')
                 
                 await user.send(content=person_dict['reason'], tts=True)
 
