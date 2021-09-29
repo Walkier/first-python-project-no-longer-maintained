@@ -185,7 +185,7 @@ async def background_hook_loop():
     while not client.is_closed():
         #hooks
         await last_seen_background()
-        if datetime.now().weekday() == 5 and datetime.now().hour == 8 and datetime.now().minute == 0:
+        if datetime.now().day == 1:
             await weekly_msg_stats() 
 
         try:
@@ -211,13 +211,13 @@ async def new_vc_join_check():
         peruni_gen_channel = client.get_channel(uni_instance_dict['vc_join_sub'][guild_id])
         
         for vc in guild.voice_channels:
-            if vc.name not in vc_dic:
-                vc_dic[vc.name] = 0
+            if str(vc.id) not in vc_dic:
+                vc_dic[str(vc.id)] = 0
 
-            if len(vc.members) > 0 and vc_dic[vc.name] == 0:
+            if len(vc.members) > 0 and vc_dic[str(vc.id)] == 0:
                 await peruni_gen_channel.send("@here "+vc.name+" is open")
 
-            vc_dic[vc.name] = len(vc.members)
+            vc_dic[str(vc.id)] = len(vc.members)
 
 async def last_fm_update(client):
     #get json of last 1 track
@@ -273,7 +273,7 @@ async def weekly_msg_stats():
             string_buffer += member.mention + ": *0%* | "
     string_buffer = string_buffer[:-2]
 
-    msg = await channel.send("**Weekly Message Count Breakdown** ("+statStartDate+" - "+datetime.strftime(datetime.now(),'%m/%d')+"):"+ \
+    msg = await channel.send("**Weekly? Message Count Breakdown** ("+statStartDate+" - "+datetime.strftime(datetime.now(),'%m/%d')+"):"+ \
         "\nLoneliest ->**" + string_buffer + "**<- Nonexistent" + "\nTotal: " + str(total_msgs))
     
     await msg.pin()
@@ -315,6 +315,11 @@ async def siege_stopper_check():
                             await guild_user.send(content='REEEEEEEEEEEEE set a timer')
                 
                 await user.send(content=person_dict['reason'], tts=True)
+        elif time_now >= person_dict['time'] + person_dict['active_delta'] - timedelta(minutes=3) and person_dict['delays'] > 0: # t - 3 min warning
+            user = guild.get_member(key)
+            if str(user.status) != 'offline': #online
+                
+                await user.send(content="less than 3 minutes until kick sir", tts=True)
 
         if person_dict['active'] or person_dict['day_reset']:
             user = guild.get_member(key)
@@ -418,7 +423,7 @@ async def suck_it(ctx):
     msg = await channel.send(PrivateVals.emoji_pop+PrivateVals.emoji_kev)
     await asyncio.sleep(1)
 
-    delay = 0.05
+    delay = 1
     for j in range(3):
         for i in range(2):
             space = ' '*(i+1)*2
@@ -434,6 +439,48 @@ async def suck_it(ctx):
         await asyncio.sleep(delay)
         await msg.edit(content=PrivateVals.emoji_pop + space + PrivateVals.emoji_kev)
     await msg.edit(content=PrivateVals.emoji_pop+"▫️▫️▫️"+PrivateVals.emoji_kev)
+
+@client.command(pass_context=True, brief="Try it. I was clearly too bored.")
+async def theworm(ctx):
+    print(str(datetime.now()) + " theworm ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    CANVAS_LEN = 32
+
+    msg = await channel.send('⠀'*CANVAS_LEN)
+    await asyncio.sleep(1)
+
+    start = 0
+    length = 0
+    end = start + length
+    forward_mode = False
+    worm = "-"
+    space = "⠀"
+
+    while length != CANVAS_LEN:
+        #boundary checking
+        end = start + length
+        if end == CANVAS_LEN or start == 0:
+            forward_mode = not forward_mode
+            length += 1
+            start -= int(not forward_mode)
+            if channel.id == PrivateVals.al_gen_id:
+                CANVAS_LEN = 8
+                space = PrivateVals.emoji_ai_null
+                worm = PrivateVals.emoji_al_kev if forward_mode else PrivateVals.emoji_al_kev_rev
+
+        content= space*start + worm*length + space*(CANVAS_LEN-length-start)
+        await msg.edit(content=content)
+
+        #move snake
+        if forward_mode:
+            start += 1
+        else:
+            start -= 1
+
+        await asyncio.sleep(1)
+
+    await msg.edit(content=worm*CANVAS_LEN)
 
 # @client.command(pass_context=True, brief="Schedule a game time with friends! Takes no arguments.")
 # async def gametime(ctx):
@@ -591,7 +638,7 @@ async def will_sleep(ctx, minutes: int):
     # await channel.send('Hello {.author}!'.format(msg))
 
     #perform delay
-    if minutes > 60:
+    if minutes > 20:
         await channel.send("A bit too much don't you think? ;)")
         return
     
@@ -619,7 +666,7 @@ async def get_ids(ctx):
     print(str(datetime.now()) + " get_emojis ran by " + str(ctx.message.author))
     channel = ctx.channel
 
-    await channel.send(str(channel.guild.emojis) + '\nChannel ID: '+ str(channel.id))
+    await channel.send(str(channel.guild.emojis) + '\nChannel ID: '+ str(channel.id) + '\nGuild ID: ' + str(ctx.guild.id))
 
 @client.command(pass_context=True,  aliases=['remindme'], brief='Reminds you at specificed time (-remindme "date/time" @tags msg)', 
     help='example: -remindme "12pm EST March 12" @roboto all hail')
