@@ -55,7 +55,7 @@ except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
 Last_week_stat_msg = [None]
 
 uni_instance_dict = {
-    'vc_join_sub': { str(PrivateVals.peruni_guild_id): PrivateVals.peruni_gen_id },
+    'vc_join_sub': { str(PrivateVals.peruni_guild_id): PrivateVals.peruni_gen_id, str(PrivateVals.alert_guild_id): PrivateVals.alert_vc_text_chan_id },
 }
 siege_stopper_dic = {}
 encapLogic = EncapLogic(client)
@@ -216,6 +216,9 @@ async def new_vc_join_check():
 
             if len(vc.members) > 0 and vc_dic[str(vc.id)] == 0:
                 await peruni_gen_channel.send("@here "+vc.name+" is open")
+                if random.random() <= 0.07:
+                    if guild_id == str(PrivateVals.al_guild_id):
+                        del uni_instance_dict['vc_join_sub'][guild_id]
 
             vc_dic[str(vc.id)] = len(vc.members)
 
