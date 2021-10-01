@@ -185,7 +185,7 @@ async def background_hook_loop():
     while not client.is_closed():
         #hooks
         await last_seen_background()
-        if datetime.now().day == 1:
+        if datetime.now().day == 1 and datetime.now().hour == 8 and datetime.now().minute == 0:
             await weekly_msg_stats() 
 
         try:
