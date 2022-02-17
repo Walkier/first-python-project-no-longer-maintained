@@ -55,7 +55,7 @@ except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
 Last_week_stat_msg = [None]
 
 uni_instance_dict = {
-    'vc_join_sub': { str(PrivateVals.peruni_guild_id): PrivateVals.peruni_gen_id, str(PrivateVals.alert_guild_id): PrivateVals.alert_vc_text_chan_id },
+    'vc_join_sub': { str(PrivateVals.peruni_guild_id): PrivateVals.peruni_gen_id, str(PrivateVals.al_guild_id): PrivateVals.al_gen_id },
 }
 siege_stopper_dic = {}
 encapLogic = EncapLogic(client)
@@ -70,8 +70,8 @@ async def on_ready():
 
     chamber = client.get_channel(PrivateVals.chamber)
     void = client.get_channel(PrivateVals.void)
-    await chamber.send("ran")
-    await void.send("ran")
+    await chamber.send("ran, PLEASE SET YOUR STOPPER")
+    await void.send("ran, PLEASE SET YOUR STOPPER")
 
     #load in uni_time_triggers global dict :(
     try:
@@ -131,7 +131,7 @@ async def on_message(message):
 #  -- on_message hook defs --
 
 async def admin_commands(message):
-    if(message.content == "$exit"):
+    if message.content == "$exit" or message.content == "$restart":
         print("$QUIT RAN BY", PrivateVals.author)
         with open("savefiles/member_lastseen.json", 'w') as f:
             f.write(json.dumps(Member_lastseen, default=str))
@@ -144,6 +144,10 @@ async def admin_commands(message):
             for guild, channel in uni_instance_dict['vc_join_sub'].items():
                 await client.get_channel(channel).send("vc_join_sub unsubbed, bot shutting down")
         await client.close()
+        if message.content == "$restart":
+            import sys
+            os.execv(sys.executable, ['python3'] + sys.argv)
+        
     elif(message.content.split()[0] == "$status"):
         await client.change_presence(activity = discord.Game(name = message.content[8:]))
         globals()['fm_bool'] = False
@@ -153,6 +157,10 @@ async def admin_commands(message):
             await client.change_presence(activity = discord.Activity(name='last.fm', type=discord.ActivityType.listening))
         else:
             await client.change_presence(activity = discord.Game(name="-help"))
+    elif(message.content.split()[0] == "$debug"):
+        print('---debug activated!!! by:\n'+str(message))
+        import pdb
+        pdb.set_trace()
     else:
         await encapLogic.admin_commands(message)
 
@@ -209,16 +217,14 @@ async def new_vc_join_check():
     for guild_id in uni_instance_dict['vc_join_sub']:
         guild = client.get_guild(int(guild_id))
         peruni_gen_channel = client.get_channel(uni_instance_dict['vc_join_sub'][guild_id])
-        
-        for vc in guild.voice_channels:
+
+        for vc in filter(lambda x: isinstance(x, discord.channel.VoiceChannel), guild.channels):
             if str(vc.id) not in vc_dic:
                 vc_dic[str(vc.id)] = 0
 
             if len(vc.members) > 0 and vc_dic[str(vc.id)] == 0:
                 await peruni_gen_channel.send("@here "+vc.name+" is open")
-                if random.random() <= 0.07:
-                    if guild_id == str(PrivateVals.al_guild_id):
-                        del uni_instance_dict['vc_join_sub'][guild_id]
+                # if ransudo 
 
             vc_dic[str(vc.id)] = len(vc.members)
 
@@ -641,7 +647,7 @@ async def will_sleep(ctx, minutes: int):
     # await channel.send('Hello {.author}!'.format(msg))
 
     #perform delay
-    if minutes > 20:
+    if minutes > 30:
         await channel.send("A bit too much don't you think? ;)")
         return
     
