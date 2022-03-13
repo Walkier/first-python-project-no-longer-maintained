@@ -18,6 +18,7 @@ import util
 from PrivateVals import PrivateValsV1 as PrivateVals
 from PublicVals import PublicVals
 from EncapLogic import EncapLogic
+from global_dict import GlobalStateManager, GlobalDict
 # from GameTime import GameTimeUI, GameTime
 
 import dateparser
@@ -57,7 +58,9 @@ Last_week_stat_msg = [None]
 uni_instance_dict = {
     'vc_join_sub': { str(PrivateVals.peruni_guild_id): PrivateVals.peruni_gen_id, str(PrivateVals.al_guild_id): PrivateVals.al_gen_id },
 }
-siege_stopper_dic = {}
+global_state = GlobalStateManager([
+    GlobalDict('stopper_dict.json', PrivateVals.stopper_default, persistent=False),
+])
 encapLogic = EncapLogic(client)
 
 # -- runs when bot is ready --
@@ -70,8 +73,8 @@ async def on_ready():
 
     chamber = client.get_channel(PrivateVals.chamber)
     void = client.get_channel(PrivateVals.void)
-    await chamber.send("ran, PLEASE SET YOUR STOPPER")
-    await void.send("ran, PLEASE SET YOUR STOPPER")
+    await chamber.send("ran")
+    await void.send("ran")
 
     #load in uni_time_triggers global dict :(
     try:
@@ -293,6 +296,7 @@ async def weekly_msg_stats():
     Temp_msg_count_global.clear()
     Temp_msg_count_global['date\nx'] = datetime.now()
 
+last_day = datetime.now().day
 # kicks people off voice channels after assigned time
 async def siege_stopper_check():
     guild = client.get_guild(PrivateVals.peruni_guild_id)
@@ -301,12 +305,13 @@ async def siege_stopper_check():
     time_now = datetime.now()
 
     #shift reset time by 24 hours at 0:00
-    if time_now.hour == 8 and time_now.minute == 0:
-        for key in siege_stopper_dic:
-            siege_stopper_dic[key]['time_reset'] += timedelta(hours=24)
-            siege_stopper_dic[key]['day_reset'] = True
+    if time_now.hour == 8 and time_now.minute == 0 and time_now.day != last_day:
+        for key in global_state.data['stopper_dict']:
+            global_state.data['stopper_dict'][key]['time_reset'] += timedelta(hours=24)
+            global_state.data['stopper_dict'][key]['day_reset'] = True
+            last_day = time_now.day
 
-    for key, person_dict in siege_stopper_dic.items():
+    for key, person_dict in global_state.data['stopper_dict'].items():
         #if time hits
         if time_now >= person_dict['time'] + person_dict['active_delta'] and time_now < person_dict['time'] + person_dict['end_delta']:
             user = guild.get_member(key)
@@ -607,7 +612,7 @@ async def stopper(ctx, time: str, *args):
     await channel.send("parsed time: " + date.strftime("%m/%d/%Y, %H:%M:%S") + " tz: " + str(date.tzinfo))
 
     #op to save time only later
-    siege_stopper_dic[ctx.message.author.id] = {'time': date, 'reason': reason, 'time_reset': date, 'day_reset': False,
+    global_state.data['stopper_dict'][ctx.message.author.id] = {'time': date, 'reason': reason, 'time_reset': date, 'day_reset': False,
         'end_delta': timedelta(hours=6), 'active_delta': timedelta(hours=0), 'active': False, 'delays': 0}
 
 @stopper.error
@@ -624,7 +629,7 @@ async def stopper_dict(ctx):
 
     # TODO: lim access 
 
-    await channel.send(siege_stopper_dic)
+    await channel.send(global_state.data['stopper_dict'])
 
 @client.command(pass_context=True, brief="Delays the effect of stopper in minutes")
 async def will_sleep(ctx, minutes: int):
@@ -633,7 +638,7 @@ async def will_sleep(ctx, minutes: int):
     
     # TODO: tz support, dm after kick, enablers
 
-    person_dict = siege_stopper_dic[ctx.message.author.id]
+    person_dict = global_state.data['stopper_dict'][ctx.message.author.id]
 
     #7 second rule
     await channel.send("Please confirm in 7 seconds...")
@@ -651,7 +656,7 @@ async def will_sleep(ctx, minutes: int):
         await channel.send("A bit too much don't you think? ;)")
         return
     
-    if ctx.message.author.id in siege_stopper_dic.keys() and person_dict['delays'] < 3:
+    if ctx.message.author.id in global_state.data['stopper_dict'].keys() and person_dict['delays'] < 3:
         person_dict['active_delta'] += timedelta(minutes=minutes)
         await channel.send('Stopped delayed by '+str(minutes)+' minutes '+str(person_dict['time'] + person_dict['active_delta']))
 
@@ -803,6 +808,7 @@ functions to make
 '''
 
 #client.loop.create_task(last_seen_background())
+global_state.load_all()
 client.run(PrivateVals.token)
 
 '''
