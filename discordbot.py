@@ -1,5 +1,5 @@
-#walkbot 0.2.1 comm.0 by Walkier
-#python 3.5.3 on pi
+#walkbot 0.2.2 by Walkier
+#python 3.6.8 on pi
 
 # SEE async def ping(ctx) for definition of the simplest command
 
@@ -19,10 +19,12 @@ from PrivateVals import PrivateValsV1 as PrivateVals
 from PublicVals import PublicVals
 from EncapLogic import EncapLogic
 from global_dict import GlobalStateManager, GlobalDict
+import global_var
 # from GameTime import GameTimeUI, GameTime
 
 import dateparser
 import pytz
+from opensea import OpenseaAPI
 
 import logging
 import traceback
@@ -68,6 +70,8 @@ encapLogic = EncapLogic(client)
 async def on_ready():
     print("I am ", client.user.name, datetime.now())
     print(str(client.guilds))
+
+    global_var.init_global()
 
     await client.change_presence(activity = discord.Game(name="-help by Walker"))
 
@@ -149,7 +153,7 @@ async def admin_commands(message):
         await client.close()
         if message.content == "$restart":
             import sys
-            os.execv(sys.executable, ['python3'] + sys.argv)
+            os.execv(sys.executable, [PublicVals.python_str] + sys.argv)
         
     elif(message.content.split()[0] == "$status"):
         await client.change_presence(activity = discord.Game(name = message.content[8:]))
@@ -296,11 +300,12 @@ async def weekly_msg_stats():
     Temp_msg_count_global.clear()
     Temp_msg_count_global['date\nx'] = datetime.now()
 
-last_day = datetime.now().day
 # kicks people off voice channels after assigned time
 async def siege_stopper_check():
     guild = client.get_guild(PrivateVals.peruni_guild_id)
     peruni_gen_channel = client.get_channel(PrivateVals.peruni_gen_id) # TODO: require generalization
+
+    last_day = global_var.last_day
 
     time_now = datetime.now()
 
@@ -345,6 +350,8 @@ async def siege_stopper_check():
                     person_dict['active_delta'] = timedelta(0)
                     person_dict['delays'] = 0
                     person_dict['day_reset'] = False
+
+    global_var.last_day = last_day
 
 async def uni_time_triggers_check():
     time_now = datetime.now()
@@ -788,6 +795,27 @@ async def delping(ctx, *args):
                 return
 
     await channel.send("You do not own any reminder at "+time_code)
+
+@client.command(pass_context=True, brief="Returns info on NFT asset given asset_contract_address and token_id.")
+async def opensea(ctx, asset_contract_address, token_id):
+    print(str(datetime.now()) + " opensea ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    api = OpenseaAPI(apikey='')
+    try:
+        result = api.asset(asset_contract_address=asset_contract_address, token_id=token_id)
+    except:
+        result = {'success': False} #dumb thing from wrapper
+    
+    if 'success' not in result:
+        embed = discord.Embed(title=result['name'], url=result['permalink'], description=result['asset_contract']['description'])
+        stats = '\n'.join([f'{k}: {v}' for k, v in result['collection']['stats'].items()])
+        embed.set_footer(text=f'Collection stats:\n{stats}')
+        embed.set_image(url=result['image_url'])
+        await channel.send(embed=embed)
+        return
+    
+    await channel.send("Error: Could not find asset")
 
 '''
 stuff to do:
