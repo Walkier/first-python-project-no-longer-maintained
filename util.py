@@ -18,18 +18,18 @@ def format_time(time):
 
 #helper function for im
 async def get_json(url: str):
-    session = aiohttp.ClientSession()
-    try:
-        async with session.get(url, timeout=5) as resp:
-            try:
-                load = await resp.json()
-                await session.close()
-                return load
-            except:
-                await session.close()
-                return {}
-    except asyncio.TimeoutError:
-        return None
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url, timeout=5) as resp:
+                try:
+                    load = await resp.json()
+                    await session.close()
+                    return load
+                except:
+                    await session.close()
+                    return {}
+        except asyncio.TimeoutError:
+            return None
 
 #add reactions to message
 async def add_reactions(msg, emojis):
