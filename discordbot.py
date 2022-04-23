@@ -687,7 +687,11 @@ async def get_ids(ctx):
     print(str(datetime.now()) + " get_emojis ran by " + str(ctx.message.author))
     channel = ctx.channel
 
-    await channel.send(str(channel.guild.emojis) + '\nChannel ID: '+ str(channel.id) + '\nGuild ID: ' + str(ctx.guild.id))
+    await channel.send('\nChannel ID: '+ str(channel.id) + '\nGuild ID: ' + str(ctx.guild.id))
+
+    await channel.send("Emojis:")
+    for emoji in util.chunks(channel.guild.emojis, 5):
+        await channel.send(str(emoji))
 
 @client.command(pass_context=True,  aliases=['remindme'], brief='Reminds you at specificed time (-remindme "date/time" @tags msg)', 
     help='example: -remindme "12pm EST March 12" @roboto all hail')
