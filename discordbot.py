@@ -80,6 +80,9 @@ async def on_ready():
     await chamber.send("ran")
     await void.send("ran")
 
+    if global_var.background_hooked:
+        return
+
     #load in uni_time_triggers global dict :(
     try:
         with open("savefiles/uni_time_triggers.json") as f:
@@ -147,7 +150,7 @@ async def admin_commands(message):
         with open("savefiles/uni_time_triggers.json", 'w') as f:
             f.write(json.dumps(uni_time_triggers, default=util.serialize_uni_time_triggers))
         await message.channel.send("SHUTTING DOWN...")
-        if datetime.now() > Bot_start_time + timedelta(minutes=5):
+        if datetime.now() > Bot_start_time + timedelta(minutes=3) and message.content != "$restart":
             for guild, channel in uni_instance_dict['vc_join_sub'].items():
                 await client.get_channel(channel).send("vc_join_sub unsubbed, bot shutting down")
         await client.close()
@@ -197,6 +200,7 @@ async def admin_commands(message):
 # runs once in the background every minute
 async def background_hook_loop():
     await client.wait_until_ready()
+    global_var.background_hooked = True
     while not client.is_closed():
         #hooks
         await last_seen_background()
@@ -230,6 +234,8 @@ async def new_vc_join_check():
                 vc_dic[str(vc.id)] = 0
 
             if len(vc.members) > 0 and vc_dic[str(vc.id)] == 0:
+                await peruni_gen_channel.send("@here "+vc.name+" is open")
+                await asyncio.sleep(1)
                 await peruni_gen_channel.send("@here "+vc.name+" is open")
                 # if ransudo 
 
