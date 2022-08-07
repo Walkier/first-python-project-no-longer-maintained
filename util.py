@@ -59,7 +59,7 @@ async def reaction_reponse_listener(msg, client, remove=False, emojis=None, sec=
 
     return reaction, user
 
-async def waitForConfirm(client, channel, author_id, confirm_msg):
+async def wait_for_confirm(client, channel, author_id, confirm_msg):
     await channel.send("Please confirm in 7 seconds...")
     await asyncio.sleep(7.0)
     await channel.send(confirm_msg)
@@ -70,7 +70,7 @@ async def waitForConfirm(client, channel, author_id, confirm_msg):
     msg = await client.wait_for('message', check=check, timeout=7.0)
     return True
 
-def getUsername(user):
+def get_username(user):
     return user.name + '#' + user.discriminator
 
 def serialize_uni_time_triggers(obj):

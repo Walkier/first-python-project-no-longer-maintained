@@ -24,6 +24,7 @@ import global_var
 
 import dateparser
 import pytz
+import requests
 from opensea import OpenseaAPI
 
 import logging
@@ -62,6 +63,8 @@ uni_instance_dict = {
 }
 global_state = GlobalStateManager([
     GlobalDict('stopper_dict.json', PrivateVals.stopper_default, persistent=False),
+    GlobalDict('wake_track.json', {}, persistent=False),
+    GlobalDict('last_min.json', {}, persistent=False),
 ])
 encapLogic = EncapLogic(client)
 
@@ -149,11 +152,14 @@ async def admin_commands(message):
             f.write(json.dumps(Temp_msg_count_global, default=str))
         with open("savefiles/uni_time_triggers.json", 'w') as f:
             f.write(json.dumps(uni_time_triggers, default=util.serialize_uni_time_triggers))
+        global_state.save_all()
+        
         await message.channel.send("SHUTTING DOWN...")
         if datetime.now() > Bot_start_time + timedelta(minutes=3) and message.content != "$restart":
             for guild, channel in uni_instance_dict['vc_join_sub'].items():
                 await client.get_channel(channel).send("vc_join_sub unsubbed, bot shutting down")
         await client.close()
+        
         if message.content == "$restart":
             import sys
             os.execv(sys.executable, [PublicVals.python_str] + sys.argv)
@@ -202,15 +208,18 @@ async def background_hook_loop():
     await client.wait_until_ready()
     global_var.background_hooked = True
     while not client.is_closed():
+        date_now = datetime.now()
+
         #hooks
         await last_seen_background()
+        await last_min_background()
         # if datetime.now().day == 1 and datetime.now().hour == 8 and datetime.now().minute == 0:
         #     await weekly_msg_stats() 
 
         try:
             await siege_stopper_check()
             await uni_time_triggers_check()
-            if datetime.now() > Bot_start_time + timedelta(minutes=5):
+            if datetime.now() > Bot_start_time + timedelta(minutes=10):
                 await new_vc_join_check()
         except Exception as e:
             print("Background loop exception", e)
@@ -218,7 +227,10 @@ async def background_hook_loop():
         if globals()['fm_bool']:
             asyncio.get_event_loop().create_task(last_fm_update(client))
 
-        nextmin = 60 - datetime.now().second
+        if date_now.minute % 5 == 0:
+            await antho_league_check()
+
+        nextmin = 60 - date_now.second
         await asyncio.sleep(nextmin)
 
 # -- background_hook_loop hook defs --
@@ -234,9 +246,15 @@ async def new_vc_join_check():
                 vc_dic[str(vc.id)] = 0
 
             if len(vc.members) > 0 and vc_dic[str(vc.id)] == 0:
-                await peruni_gen_channel.send("@here "+vc.name+" is open")
+                msg_str = "@here "+vc.name+" is open"
+                msg = await peruni_gen_channel.send(msg_str)
                 await asyncio.sleep(1)
-                await peruni_gen_channel.send("@here "+vc.name+" is open")
+                await peruni_gen_channel.send(msg_str)
+                await msg.delete()
+
+                author = client.get_channel(PrivateVals.void).guild.get_member(PrivateVals.author_id)
+                await author.send(msg_str)
+                
                 # if ransudo 
 
             vc_dic[str(vc.id)] = len(vc.members)
@@ -259,12 +277,48 @@ async def last_fm_update(client):
         void = client.get_channel(PrivateVals.void)
         await void.send("last_fm exception:"+str(e))
 
+league_channel = None
+last_league_time = None
+async def antho_league_check():
+    league_channel = globals()['league_channel']
+    if league_channel:
+        try:
+            url = 'https://na.op.gg/api/games/na/summoners/dEcanjS1bbLnqEPKTsVpYYFKS8K8pfh6GUw1yaMFh2Neo7o?hl=en_US&game_type=TOTAL'
+            headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
+            resp = requests.get(url, headers=headers)
+
+            # jsonify request
+            json_data = resp.json()
+
+            game_result = json_data['data'][0]['myData']['stats']['result']
+            last_game_time = json_data['meta']['last_game_created_at']
+            game_mins = json_data['data'][0]['game_length_second'] // 60
+
+            if globals()['last_league_time'] and globals()['last_league_time'] != last_game_time:
+                await league_channel.send('Antho has just spent **{}** minutes in a League game just to **{}**'.format(game_mins, game_result))
+
+            globals()['last_league_time'] = last_game_time
+        except Exception as e:
+            return
+
 #check member status and store time (in bot's tz) in Member_lastseen dic
 async def last_seen_background():
     members = client.get_all_members()
     for member in members:
         if str(member.status) != "offline" and not member.bot:
-            Member_lastseen[util.getUsername(member)] = datetime.now()
+            Member_lastseen[util.get_username(member)] = datetime.now()
+
+async def last_min_background():
+    members = client.get_all_members()
+    for member in members:
+        username = util.get_username(member)
+        status = str(member.status)
+
+        if username in global_state.data['last_min'] and username in global_state.data['wake_track'] and global_state.data['last_min'][username] != status:
+            for channel in global_state.data['wake_track'][username]:
+                await channel.send(f'{username} is {status}')
+
+        global_state.data['last_min'][username] = status 
 
 #sends weekly msg count stats to channel
 async def weekly_msg_stats():
@@ -340,11 +394,11 @@ async def siege_stopper_check():
                             await guild_user.send(content='REEEEEEEEEEEEE set a timer')
                 
                 await user.send(content=person_dict['reason'], tts=True)
-        elif time_now >= person_dict['time'] + person_dict['active_delta'] - timedelta(minutes=3) and person_dict['delays'] > 0: # t - 3 min warning
+        elif time_now >= person_dict['time'] + person_dict['active_delta'] - timedelta(minutes=5) and person_dict['delays'] > 0: # t - 3 min warning
             user = guild.get_member(key)
             if str(user.status) != 'offline': #online
                 
-                await user.send(content="less than 3 minutes until kick sir", tts=True)
+                await user.send(content="less than 5 minutes until kick sir", tts=True)
 
         if person_dict['active'] or person_dict['day_reset']:
             user = guild.get_member(key)
@@ -407,7 +461,7 @@ async def lastseen(ctx, user: discord.User):
     await ctx.message.delete()
 
     try:
-        time = Member_lastseen[util.getUsername(user)]
+        time = Member_lastseen[util.get_username(user)]
     except KeyError:
         await channel.send("Have not seen user since at least %s (HKT)." % (Bot_start_time))
         return
@@ -819,13 +873,49 @@ async def opensea(ctx, asset_contract_address, token_id):
     
     if 'success' not in result:
         embed = discord.Embed(title=result['name'], url=result['permalink'], description=result['asset_contract']['description'])
-        stats = '\n'.join([f'{k}: {v}' for k, v in result['collection']['stats'].items()])
-        embed.set_footer(text=f'Collection stats:\n{stats}')
+        # stats = '\n'.join([f'{k}: {v}' for k, v in result['collection']['stats'].items()])
+        # embed.set_footer(text=f'Collection stats:\n{stats}')
         embed.set_image(url=result['image_url'])
         await channel.send(embed=embed)
         return
     
     await channel.send("Error: Could not find asset")
+
+@client.command(pass_context=True, brief="Pings you on wake")
+async def wake_track(ctx, user_code: str):
+    print(str(datetime.now()) + " wake_track ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    members = [util.get_username(x) for x in client.get_all_members()]
+    if user_code in members:
+        if user_code not in global_state.data['wake_track']:
+            global_state.data['wake_track'][user_code] = {channel}
+        else:
+            global_state.data['wake_track'][user_code].add(channel)
+        await channel.send(f"reg {user_code}")
+    else:
+        await channel.send(f"{user_code} not found. must be in format username#1234")
+
+@client.command(pass_context=True, brief="Removes pings you on wake")
+async def rev_track(ctx, user_code: str):
+    print(str(datetime.now()) + " rev_track ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    if user_code in global_state.data['wake_track']:
+        if channel in global_state.data['wake_track'][user_code]:
+            global_state.data['wake_track'][user_code].remove(channel)
+            await channel.send("deregister complete")
+            return
+    
+    await channel.send("user not found. must be in format username#1234")
+
+@client.command(pass_context=True, brief="It's sad")
+async def league_track(ctx):
+    print(str(datetime.now()) + " league track ran by " + str(ctx.message.author))
+    channel = ctx.channel
+
+    globals()['league_channel'] = channel
+    await globals()['league_channel'].send("Channel registered")
 
 '''
 stuff to do:
