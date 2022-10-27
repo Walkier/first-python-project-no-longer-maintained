@@ -3,11 +3,14 @@
 Personal Discord bot used for coping with people living in different timezones.
 Very much bodged together with old code.
 
-Code entry point: discordbot.py (want fix/change? submit pull)
+Code entry point: discordbot.py 
+*(user? want fix/change? submit pull)*
 
 ## Help Command
 Type in chat:
-**<span style="color:red">-help</span>**
+```diff
+-help
+```
 
 Help as of Oct 2022:
 ````
