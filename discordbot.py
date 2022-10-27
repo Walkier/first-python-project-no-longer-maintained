@@ -59,7 +59,7 @@ except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
 Last_week_stat_msg = [None]
 
 uni_instance_dict = {
-    'vc_join_sub': { str(PrivateVals.peruni_guild_id): PrivateVals.peruni_gen_id, str(PrivateVals.al_guild_id): PrivateVals.al_gen_id },
+    'vc_join_sub': { str(PrivateVals.peruni_guild_id): PrivateVals.peruni_gen_id },
 }
 global_state = GlobalStateManager([
     GlobalDict('stopper_dict.json', PrivateVals.stopper_default, persistent=False),
@@ -235,6 +235,7 @@ async def background_hook_loop():
 
 # -- background_hook_loop hook defs --
 
+a_bad_bool = False
 vc_dic = {}
 async def new_vc_join_check():
     for guild_id in uni_instance_dict['vc_join_sub']:
@@ -252,8 +253,10 @@ async def new_vc_join_check():
                 await peruni_gen_channel.send(msg_str)
                 await msg.delete()
 
-                author = client.get_channel(PrivateVals.void).guild.get_member(PrivateVals.author_id)
-                await author.send(msg_str)
+                if a_bad_bool:
+                    #vc is open pm
+                    author = client.get_channel(PrivateVals.void).guild.get_member(PrivateVals.author_id)
+                    await author.send(msg_str)
                 
                 # if ransudo 
 
@@ -278,7 +281,7 @@ async def last_fm_update(client):
         await void.send("last_fm exception:"+str(e))
 
 league_channel = None
-last_league_time = None
+last_league_id = None
 async def antho_league_check():
     league_channel = globals()['league_channel']
     if league_channel:
@@ -291,15 +294,16 @@ async def antho_league_check():
             json_data = resp.json()
 
             game_result = json_data['data'][0]['myData']['stats']['result']
-            last_game_time = json_data['meta']['last_game_created_at']
+            last_game_id = json_data['data'][0]['id']
             game_mins = json_data['data'][0]['game_length_second'] // 60
 
-            if globals()['last_league_time'] and globals()['last_league_time'] != last_game_time:
+            if globals()['last_league_id'] and globals()['last_league_id'] != last_game_id:
                 await league_channel.send('Antho has just spent **{}** minutes in a League game just to **{}**'.format(game_mins, game_result))
+                print(last_game_id, game_mins, game_result)
 
-            globals()['last_league_time'] = last_game_time
+            globals()['last_league_id'] = last_game_id
         except Exception as e:
-            return
+            print('err', str(e))
 
 #check member status and store time (in bot's tz) in Member_lastseen dic
 async def last_seen_background():
