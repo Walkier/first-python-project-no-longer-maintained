@@ -435,7 +435,7 @@ async def ping(ctx):
 
     await channel.send("pew")
 
-@client.command(pass_context=True, brief="subscribes this channel to updates of people joining voice call", \
+@client.command(pass_context=True, brief="'-vc_join_sub true' will subscribe this channel to vc joins", \
     help="example usage:\n-vc_join_sub true\n-vc_join_sub false")
 async def vc_join_sub(ctx, enable_boolean: bool):
     print(str(datetime.now()) + " vc_join_sub ran by " + str(ctx.message.author) + ' ' + str(ctx.message.guild.id))
@@ -457,7 +457,7 @@ async def lastseen_error(ctx, error):
 
     await channel.send(str(error))
 
-@client.command(pass_context=True, brief="Accepts @user & displays their last online time.")
+@client.command(pass_context=True, brief="-lastseen @username, shows you when last online", help="Accepts @user & displays their last online time.")
 async def lastseen(ctx, user: discord.User):
     print(str(datetime.now()) + " lastseen ran by " + str(ctx.message.author))
     channel = ctx.channel
@@ -479,7 +479,7 @@ async def lastseen_error(ctx, error):
 
     await channel.send(str(error)+"\nPlease tag user with @ symbol.")
 
-@client.command(pass_context=True, brief="Shows time of various timezones.")
+@client.command(pass_context=True, brief="Shows time of various timezones, -time")
 async def time(ctx):
     print(str(datetime.now()) + " time ran by " + str(ctx.message.author))
     channel = ctx.channel
@@ -490,7 +490,7 @@ async def time(ctx):
 
     await channel.send(util.format_time(datetime.now()))
 
-@client.command(pass_context=True, brief="Utilizes quantum tunneling to probe a @user for particles.")
+@client.command(pass_context=True, brief="Quantumly probe a @user for particles. -yayornot @username")
 async def yayornot(ctx, user: discord.User):
     await encapLogic.yayornot(ctx, user)
 
@@ -575,7 +575,7 @@ async def theworm(ctx):
 
 #TODO: Rus
 #blatantly copied from NotSoBot
-@client.command(pass_context=True, aliases=['image', 'photo', 'img'], brief="Blatant copy of NotSoBot's image search command.", cooldown=(3, 5))
+@client.command(pass_context=True, aliases=['image', 'photo', 'img'], brief="-im <your search term>, image search command", help="Blatant copy of NotSoBot's image search command.", cooldown=(3, 5))
 @commands.cooldown(rate=2, per=15.0, type=commands.BucketType.user)
 async def im(ctx, *, search:str):
     print(str(datetime.now()) + " image ran by " + str(ctx.message.author))
@@ -658,7 +658,8 @@ async def im_error(ctx, error):
 
     await channel.send("Hi! Command 'im' says: "+str(error))
 
-@client.command(pass_context=True, brief="Stops Siege from ruining your life.", help="testing string")
+@client.command(pass_context=True, brief="Kicks you out of vc at night. Use at your own discretion, the bot is aggresive and uses its own tz. Like so: -stopper 11am.", \
+    help="Stops Siege from ruining your life.")
 async def stopper(ctx, time: str, *args):
     print(str(datetime.now()) + " stopper ran by " + str(ctx.message.author))
     channel = ctx.channel
@@ -693,7 +694,7 @@ async def stopper_error(ctx, error):
 
     await channel.send("Hi! Command 'siege_stopper' says: "+str(error))
 
-@client.command(pass_context=True, brief="Status of siege_stopper")
+@client.command(pass_context=True, brief="Status of stopper")
 async def stopper_dict(ctx):
     print(str(datetime.now()) + " stopper_status ran by " + str(ctx.message.author))
     channel = ctx.channel
@@ -746,7 +747,7 @@ async def will_sleep_error(ctx, error):
 
     await channel.send("Hi! Command 'will_sleep' says: "+str(error))
 
-@client.command(pass_context=True, brief="Returns emoji IDs of the server and channel ID.")
+@client.command(pass_context=True, brief="<developer-tools> Returns emoji IDs of the server and channel ID.")
 async def get_ids(ctx):
     print(str(datetime.now()) + " get_emojis ran by " + str(ctx.message.author))
     channel = ctx.channel
@@ -757,9 +758,9 @@ async def get_ids(ctx):
     for emoji in util.chunks(channel.guild.emojis, 5):
         await channel.send(str(emoji))
 
-@client.command(pass_context=True,  aliases=['remindme'], brief='Reminds you at specificed time (-remindme "date/time" @tags msg)', 
-    help='example: -remindme "12pm EST March 12" @roboto all hail')
-async def schping(ctx, time: str, *args):
+@client.command(pass_context=True,  aliases=['schping'], brief='-remindme "next year" @your_crush happy ghostanniversary', \
+    help='Reminds you at specificed time (-schping "date/time" @tags msg)')
+async def remindme(ctx, time: str, *args):
     print(str(datetime.now()) + " remindme ran by " + str(ctx.message.author))
     channel = ctx.channel
 
@@ -864,7 +865,7 @@ async def delping(ctx, *args):
 
     await channel.send("You do not own any reminder at "+time_code)
 
-@client.command(pass_context=True, brief="Returns info on NFT asset given asset_contract_address and token_id.")
+@client.command(pass_context=True, brief="-opensea <asset_contract_address> <token_id>", help="Returns info on NFT asset given asset_contract_address and token_id.")
 async def opensea(ctx, asset_contract_address, token_id):
     print(str(datetime.now()) + " opensea ran by " + str(ctx.message.author))
     channel = ctx.channel
