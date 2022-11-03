@@ -1,4 +1,3 @@
-# What-Time-Discord-Bot
 ## first-python-project-no-longer-maintained
 Personal Discord bot used for coping with people living in different timezones.
 Very much bodged together old spaghetti code.
@@ -39,3 +38,5 @@ yayornot     Quantumly probe a @user for particles. -yayornot @username
 Type -help command for more info on a command.
 You can also type -help category for more info on a category.
 ````
+
+# What-Time-Discord-Bot
