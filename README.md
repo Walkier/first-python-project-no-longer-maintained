@@ -4,6 +4,7 @@ Personal Discord bot used for coping with people living in different timezones.
 Very much bodged together with old code.
 
 Code entry point: discordbot.py 
+
 *(user? want fix/change? submit pull)*
 
 ## Help Command
