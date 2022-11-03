@@ -76,7 +76,7 @@ async def on_ready():
 
     global_var.init_global()
 
-    await client.change_presence(activity = discord.Game(name="-help by Walker"))
+    await client.change_presence(activity = discord.Game(name="github.com/Walkier/first-python-project-no-longer-maintained"))
 
     chamber = client.get_channel(PrivateVals.chamber)
     void = client.get_channel(PrivateVals.void)
