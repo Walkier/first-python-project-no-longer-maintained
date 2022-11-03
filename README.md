@@ -1,7 +1,7 @@
 # What-Time-Discord-Bot
 ## first-python-project-no-longer-maintained
 Personal Discord bot used for coping with people living in different timezones.
-Very much bodged together with old code.
+Very much bodged together old spaghetti code.
 
 Code entry point: discordbot.py 
 
